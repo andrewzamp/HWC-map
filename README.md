@@ -77,6 +77,19 @@ export HWC_LLM_BACKEND=openai HWC_LLM_BASE_URL=https://api.groq.com/openai/v1 \
 
 Tests (offline, no LLM): `pytest -q`
 
+## Custom runs (taxon, period, number of queries)
+**Actions → Update HWC map → Run workflow** opens a form where every field is optional:
+
+| Field | Example | Effect |
+|---|---|---|
+| taxon | `coyote`, `Puma concolor`, `mountain lion`, `felids` | Search one species or one group only (species: its specific names, in each edition's language) |
+| start_date / end_date | `2026-11-01` / `2026-11-15` | Explicit window (inclusive); overrides `period`. GDELT searches only ~the last 3 months |
+| period | `24h`, `7d`, `30d` | Rolling look-back window when no dates are given |
+| max_queries | `5` | Cap on GDELT queries this run |
+| max_new_articles | `10` | Cap on new articles accepted this run |
+
+Locally, the same overrides are environment variables: `HWC_TAXON`, `HWC_START_DATE`, `HWC_END_DATE`, `HWC_PERIOD`, `HWC_MAX_QUERIES`, `HWC_MAX_NEW_ARTICLES`. An unknown taxon or a malformed date stops the run immediately with a message listing the valid options. Extraction processes the most recently fetched articles first, so a targeted run's articles are handled in that same run.
+
 ## GitHub setup (one-time)
 1. **Settings → Actions → General → Workflow permissions** → *Read and write permissions* (the workflow commits the data).
 2. **Settings → Pages** → *Deploy from a branch* → `main` / `/docs`.

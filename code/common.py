@@ -29,7 +29,40 @@ def load_config(path: Path | None = None) -> dict:
         env = os.getenv(f"HWC_LLM_{key.upper()}")
         if env:
             llm[key] = env
+    # Run-time search overrides (set from the workflow's "Run workflow" form)
+    s = cfg["search"]
+    if os.getenv("HWC_TAXON", "").strip():
+        s["taxon_filter"] = os.environ["HWC_TAXON"].strip()
+    if os.getenv("HWC_PERIOD", "").strip():
+        s["period"] = os.environ["HWC_PERIOD"].strip()
+    for key in ("start_date", "end_date"):
+        v = os.getenv(f"HWC_{key.upper()}", "").strip()
+        if v:
+            s[key] = v
+    if os.getenv("HWC_MAX_QUERIES", "").strip():
+        s["max_queries"] = int(os.environ["HWC_MAX_QUERIES"])
+    if os.getenv("HWC_MAX_NEW_ARTICLES", "").strip():
+        s["max_new_articles"] = int(os.environ["HWC_MAX_NEW_ARTICLES"])
+    _validate_window(s)
     return cfg
+
+
+def _validate_window(s: dict) -> None:
+    """Fail fast on malformed dates; a date window overrides `period`."""
+    from datetime import date
+    start, end = s.get("start_date"), s.get("end_date")
+    if not (start or end):
+        return
+    try:
+        d0 = date.fromisoformat(start) if start else None
+        d1 = date.fromisoformat(end) if end else date.today()
+    except ValueError as e:
+        raise SystemExit(f"start_date/end_date must be YYYY-MM-DD: {e}")
+    if d0 and d0 > d1:
+        raise SystemExit(f"start_date {d0} is after end_date {d1}")
+    if d0 is None:
+        raise SystemExit("end_date given without start_date")
+    s["end_date"] = d1.isoformat()
 
 
 def read_jsonl(path: Path) -> list[dict]:

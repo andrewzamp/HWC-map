@@ -325,3 +325,57 @@ def test_gdelt_split_on_too_long_and_parse(monkeypatch):
     assert len(canid_calls) >= 3                            # rejected once, then split in two
     rec = next(r for grp in per_query for r in grp if r["url"] == "https://example.mx/oso")
     assert rec["date_source"] == "gdelt_seendate" and rec["published"].startswith("2026-11-26T10:15")
+
+
+# --- run-time options (workflow form) --------------------------------------------
+
+@pytest.mark.parametrize("name,expected", [
+    ("coyote", ("species", "coyote")), ("Puma concolor", ("species", "cougar")),
+    ("mountain lion", ("species", "cougar")), ("felids", ("group", "felids")),
+    ("Wild cats", ("group", "felids")), ("Ursidae", ("group", "bears")),
+])
+def test_taxon_filter(name, expected):
+    assert taxa.taxon_filter(name) == expected
+
+
+def test_taxon_filter_unknown_fails_fast():
+    with pytest.raises(SystemExit):
+        taxa.taxon_filter("panda")
+
+
+def test_single_species_units(monkeypatch):
+    import common
+    monkeypatch.setenv("HWC_TAXON", "American black bear")
+    s = common.load_config()["search"]
+    units = taxa.gdelt_units(s)
+    terms = [t for u in units for t in u["terms"]]
+    assert {u["group"] for u in units} == {"bears"}
+    assert "black bear" in terms and "oso negro" in terms
+    assert "bear" not in terms and "grizzly" not in terms           # no other species / generic terms
+    assert "American black bear" not in terms                        # redundant with "black bear"
+    us_terms = [t for u in units if u["country"] == "US" for t in u["terms"]]
+    assert not any(t.startswith("oso") for t in us_terms)           # Spanish names only in MX queries
+
+
+def test_date_window_and_overrides(monkeypatch):
+    import common
+    import fetch_news
+    monkeypatch.setenv("HWC_START_DATE", "2026-11-01")
+    monkeypatch.setenv("HWC_END_DATE", "2026-11-15")
+    monkeypatch.setenv("HWC_MAX_QUERIES", "3")
+    s = common.load_config()["search"]
+    assert fetch_news._gdelt_window(s) == {"startdatetime": "20261101000000", "enddatetime": "20261115235959"}
+    assert s["max_queries"] == 3
+    monkeypatch.setenv("HWC_START_DATE", "2026-11-20")
+    with pytest.raises(SystemExit):
+        common.load_config()
+
+
+def test_max_queries_caps_requests(monkeypatch):
+    import common
+    import fetch_news
+    monkeypatch.setenv("HWC_MAX_QUERIES", "4")
+    calls = []
+    monkeypatch.setattr(fetch_news, "_gdelt_get", lambda p, i, b: (calls.append(p) or ([], None)))
+    fetch_news.search_gdelt(common.load_config())
+    assert len(calls) == 4

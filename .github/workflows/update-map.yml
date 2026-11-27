@@ -4,9 +4,30 @@ on:
   schedule:
     - cron: "17 5 * * *"        # daily, 05:17 UTC
   workflow_dispatch:
+    # All optional: leave empty to use config.yaml (what the daily run uses).
     inputs:
+      taxon:
+        description: "Taxon: one species or group, e.g. coyote, Puma concolor, felids (empty = all)"
+        required: false
+        default: ""
+      start_date:
+        description: "Start date YYYY-MM-DD (with end date, overrides period; GDELT covers ~last 3 months)"
+        required: false
+        default: ""
+      end_date:
+        description: "End date YYYY-MM-DD (empty = today)"
+        required: false
+        default: ""
+      period:
+        description: "Look-back window if no dates, e.g. 24h, 7d, 30d (empty = config)"
+        required: false
+        default: ""
+      max_queries:
+        description: "Max number of GDELT queries this run (empty = all)"
+        required: false
+        default: ""
       max_new_articles:
-        description: "Max new articles this run (overrides config.yaml)"
+        description: "Max new articles this run (empty = config)"
         required: false
         default: ""
 
@@ -28,6 +49,13 @@ jobs:
       # once per run; the version used is written into every extracted row).
       OLLAMA_VERSION: ""
       PYTHONUNBUFFERED: "1"
+      # Run-form inputs → pipeline overrides (empty on scheduled runs)
+      HWC_TAXON: ${{ github.event.inputs.taxon }}
+      HWC_START_DATE: ${{ github.event.inputs.start_date }}
+      HWC_END_DATE: ${{ github.event.inputs.end_date }}
+      HWC_PERIOD: ${{ github.event.inputs.period }}
+      HWC_MAX_QUERIES: ${{ github.event.inputs.max_queries }}
+      HWC_MAX_NEW_ARTICLES: ${{ github.event.inputs.max_new_articles }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,10 +70,6 @@ jobs:
       - name: Read model name from config
         id: cfg
         run: echo "model=$(python -c "import yaml;print(yaml.safe_load(open('config.yaml'))['llm']['model'])")" >> "$GITHUB_OUTPUT"
-
-      - name: Override article cap
-        if: ${{ github.event.inputs.max_new_articles != '' }}
-        run: sed -i "s/^\(\s*max_new_articles:\).*/\1 ${{ github.event.inputs.max_new_articles }}/" config.yaml
 
       # 1. fetch first: if there is nothing new we skip the (slow) model setup
       - name: Fetch news

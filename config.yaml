@@ -26,6 +26,10 @@ search:
   period: 7d                  # look-back window (GDELT keeps a rolling ~3 months; e.g. 30d to backfill)
   max_results_per_query: 50   # per (group × edition) query; GDELT max 250, Google max 100
   max_new_articles: 40        # new articles accepted per run (sampled round-robin across queries)
+  max_queries: null           # cap on GDELT queries per run (null = all); rotation covers the rest on later runs
+  taxon_filter: null          # e.g. "coyote", "Puma concolor" or "felids"; null = all taxa
+  start_date: null            # YYYY-MM-DD; with end_date, overrides `period` (GDELT: last ~3 months only)
+  end_date: null
   exclude_websites: []
   # GDELT limits: query length (a 172-char query passed, 308 failed with "too
   # short or too long") and ~1 request / 5 s per IP. GitHub runners share IPs,

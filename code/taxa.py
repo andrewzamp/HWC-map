@@ -185,11 +185,12 @@ def group_colors() -> dict:
 def queries(cfg_search: dict) -> list[dict]:
     """All (group × edition) Google News queries, as plain strings."""
     out = []
+    flt = taxon_filter(cfg_search.get("taxon_filter"))
     for ed in cfg_search["editions"]:
         lang = ed.get("terms", ed["language"][:2])
         conflict = cfg_search["conflict_terms"][lang]
-        for g in registry()["groups"]:
-            terms = g["query_terms"].get(lang) or []
+        for g in _groups(flt):
+            terms = _terms_for(g, lang, flt)
             if not terms:
                 continue
             q = f"({' OR '.join(_q(t) for t in terms)}) ({' OR '.join(_q(t) for t in conflict)})"
@@ -201,6 +202,66 @@ def queries(cfg_search: dict) -> list[dict]:
 
 
 GDELT_LANG = {"en": "english", "es": "spanish", "fr": "french"}
+
+
+def taxon_filter(name: str | None) -> tuple[str, str] | None:
+    """Resolve a user-supplied taxon (group id/label, species name, synonym or
+    scientific name) → ("group", group_id) or ("species", label)."""
+    if not name:
+        return None
+    key = _norm(name)
+    for g in registry()["groups"]:
+        if key in (_norm(g["id"]), _norm(g["label"]), _norm(g["family"])):
+            return ("group", g["id"])
+        for sp in g["species"]:
+            if key in (_norm(sp["name"]), _norm(sp["scientific"])):
+                return ("species", sp["name"])
+    label = match_name(name)
+    if label and index()["by_label"][label]["rank"] == "species":
+        return ("species", label)
+    valid = [g["id"] for g in registry()["groups"]] + [sp["name"] for g in registry()["groups"] for sp in g["species"]]
+    raise SystemExit(f"Unknown taxon {name!r}. Use a group id or a species, e.g. one of: {', '.join(valid)}")
+
+
+def _terms_for(g: dict, lang: str, flt: tuple[str, str] | None) -> list[str]:
+    """Query terms of a group, restricted to one species if requested."""
+    terms = list(g["query_terms"].get(lang) or [])
+    if flt is None or flt[0] == "group":
+        return terms
+    label = flt[1]
+    own = [t for t in terms if match_name(t) == label]            # e.g. "mountain lion" → cougar
+    sp = next(s for s in g["species"] if s["name"] == label)
+    # add the species' multi-word names in this language ("brown bear", "Canada lynx"),
+    # unless already covered by a broader term ("grizzly" covers "grizzly bear")
+    covered = {w for t in own for w in _norm(t).split() if len(_norm(t).split()) == 1}
+    out, seen = list(own), {_norm(t) for t in own}
+    cands = sorted({_norm(n): n for n in [sp["name"], *sp.get("synonyms", [])]}.items(), key=lambda kv: len(kv[0]))
+    for n, name in cands:                       # shortest first, so "black bear" blocks "american black bear"
+        contains_seen = any(re.search(rf"\b{re.escape(s)}\b", n) for s in seen)
+        if len(n.split()) < 2 or n in seen or _lang_of(n) != lang or covered & set(n.split()) or contains_seen:
+            continue
+        seen.add(n)
+        out.append(name)
+    return out
+
+
+_ES_HEADS = {"oso", "osa", "lobo", "zorro", "zorra", "zorrita", "lince", "nutria", "marta", "zorrillo",
+             "vison", "gato", "leon", "perro", "gloton", "mapache", "coati", "cacomixtle", "tejon"}
+
+
+def _lang_of(name_norm: str) -> str:
+    """Registry synonyms are not language-tagged: Spanish names start with a Spanish noun."""
+    return "es" if name_norm.split()[0] in _ES_HEADS else "en"
+
+
+def _groups(flt: tuple[str, str] | None) -> list[dict]:
+    groups = registry()["groups"]
+    if flt is None:
+        return groups
+    if flt[0] == "group":
+        return [g for g in groups if g["id"] == flt[1]]
+    grp = index()["by_label"][flt[1]]["group_id"]
+    return [g for g in groups if g["id"] == grp]
 
 
 def _or(terms: list[str]) -> str:
@@ -220,12 +281,15 @@ def gdelt_units(cfg_search: dict) -> list[dict]:
     max_len = cfg_search.get("gdelt_max_query_chars", 230)
     n_c = cfg_search.get("gdelt_conflict_terms_n", 8)
     units = []
+    flt = taxon_filter(cfg_search.get("taxon_filter"))
     for ed in cfg_search["editions"]:
         lang = ed.get("terms", ed["language"][:2])
         conflict = cfg_search["conflict_terms"][lang][:n_c]
         filters = f" sourcecountry:{ed['country']} sourcelang:{GDELT_LANG.get(lang, lang)}"
-        for g in registry()["groups"]:
-            terms = g["query_terms"].get(lang) or []
+        for g in _groups(flt):
+            terms = _terms_for(g, lang, flt)
+            if not terms:
+                continue
             excl = list(g.get("exclude_terms", {}).get(lang) or [])
             unit = {"group": g["id"], "country": ed["country"], "language": ed["language"],
                     "conflict": conflict, "filters": filters}

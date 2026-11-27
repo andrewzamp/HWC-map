@@ -134,6 +134,9 @@ def main() -> int:
     done = {r["id"] for r in current}
     articles = read_jsonl(ARTICLES)
     todo = [a for a in articles if a["id"] not in done]
+    # newest-fetched first: a targeted run (one taxon / period) is processed
+    # straight away, and fresh news reaches the map before the backlog
+    todo.sort(key=lambda a: a.get("fetched") or "", reverse=True)
     cap = cfg["llm"].get("max_articles_per_run")
     if cap and len(todo) > cap:
         log.info("%d unprocessed articles; processing %d this run, the rest carry over", len(todo), cap)

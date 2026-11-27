@@ -51,7 +51,10 @@ def search_googlenews(cfg: dict) -> list[list[dict]]:
     s = cfg["search"]
     per_query: list[list[dict]] = []
     for q in taxa.queries(s):
-        gn = GNews(language=q["language"], country=q["country"], period=s["period"],
+        window = ({"start_date": tuple(map(int, s["start_date"].split("-"))),
+                   "end_date": tuple(map(int, s["end_date"].split("-")))} if s.get("start_date")
+                  else {"period": s["period"]})
+        gn = GNews(language=q["language"], country=q["country"], **window,
                    max_results=s["max_results_per_query"],
                    exclude_websites=s.get("exclude_websites") or None)
         try:
@@ -108,13 +111,27 @@ def _gdelt_date(seen: str | None) -> str | None:
         return None
 
 
+def _gdelt_window(s: dict) -> dict:
+    """Explicit date window (start/end, inclusive) if given, else rolling `period`.
+    The GDELT DOC API only searches roughly the last 3 months."""
+    if s.get("start_date"):
+        end = s.get("end_date") or datetime.now(timezone.utc).date().isoformat()
+        return {"startdatetime": s["start_date"].replace("-", "") + "000000",
+                "enddatetime": end.replace("-", "") + "235959"}
+    return {"timespan": s["period"]}
+
+
 def search_gdelt(cfg: dict) -> list[list[dict]]:
     s = cfg["search"]
     units = taxa.gdelt_units(s)
+    log.info("GDELT: %d queries | taxon=%s | window=%s", len(units), s.get("taxon_filter") or "all", _gdelt_window(s))
     # rotate the starting unit daily so that, under rate limits/time budget,
     # every unit gets queried first on some day
     k = datetime.now(timezone.utc).timetuple().tm_yday % max(len(units), 1)
     queue = units[k:] + units[:k]
+    if s.get("max_queries") and len(queue) > s["max_queries"]:
+        log.info("max_queries=%d: running %d of %d queries this run", s["max_queries"], s["max_queries"], len(queue))
+        queue = queue[:s["max_queries"]]
     budget = time.time() + s.get("gdelt_time_budget_s", 900)
     interval, backoff = s.get("gdelt_interval_s", 8), s.get("gdelt_backoff_s", [20, 45, 90])
     per_query, n_ok, n_fail, n_rl, n_skip = [], 0, 0, 0, 0
@@ -126,7 +143,7 @@ def search_gdelt(cfg: dict) -> list[list[dict]]:
         u = queue.pop(0)
         q = taxa.gdelt_query(u)
         params = {"query": q, "mode": "ArtList", "format": "json", "maxrecords": s["max_results_per_query"],
-                  "timespan": s["period"], "sort": "DateDesc"}
+                  "sort": "DateDesc", **_gdelt_window(s)}
         arts, err = _gdelt_get(params, interval, backoff)
         if arts is None and err and "too short or too long" in err and len(u["terms"]) > 1:
             h = len(u["terms"]) // 2                       # unknown length limit: split and retry
