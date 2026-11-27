@@ -136,7 +136,7 @@
       p.geocode_level !== "place" ? `<span class="tag warn">location approximate (${esc(p.geocode_level)})</span>` : "",
       p.date_is_publication_date ? `<span class="tag warn">date = publication date</span>` : "",
       p.confidence === "low" ? `<span class="tag warn">low-confidence extraction</span>` : "",
-      p.text_source === "snippet" ? `<span class="tag warn">extracted from headline/snippet only</span>` : "",
+      p.text_source && p.text_source !== "fulltext" ? `<span class="tag warn">extracted from ${p.text_source === "headline" ? "headline" : "headline/snippet"} only</span>` : "",
       p.multiple_events ? `<span class="tag warn">article reports multiple incidents</span>` : "",
       p.human_outcome === "killed" ? `<span class="tag danger">fatal</span>` : "",
     ].join("");

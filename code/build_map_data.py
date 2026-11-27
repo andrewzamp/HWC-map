@@ -22,7 +22,7 @@ from schema import SCIENTIFIC
 log = logging.getLogger("build")
 
 RANK = {
-    "text_source": {"fulltext": 1, "snippet": 0},
+    "text_source": {"fulltext": 2, "snippet": 1, "headline": 0},
     "confidence": {"high": 2, "medium": 1, "low": 0},
     "geocode_level": {"place": 2, "admin1": 1, "none": 0},
     "event_date_precision": {"day": 3, "week": 2, "month": 1, "unknown": 0},
@@ -79,7 +79,7 @@ def main() -> dict:
     arts = {a["id"]: a for a in read_jsonl(ARTICLES)}
     ex = read_jsonl(EXTRACTIONS)
     rows = [{**arts.get(e["id"], {}), **e} for e in ex]
-    events = [r for r in rows if r.get("is_specific_event")]
+    events = [r for r in rows if r.get("is_specific_event") and r.get("real_bear_involved", True)]
     located = [r for r in events if r.get("lat") is not None]
 
     features = []

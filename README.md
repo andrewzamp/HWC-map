@@ -22,18 +22,18 @@ Google News (gnews) ──► article metadata + full text ──► open-weight
 
 | Step | Script | What it does |
 |---|---|---|
-| fetch | `code/fetch_news.py` | Queries Google News (US + CA editions) with the query in `config.yaml`, drops already-seen URLs and syndicated duplicate headlines, decodes the Google redirect, downloads the article body with `trafilatura`. |
-| extract | `code/extract.py` | Sends headline + date + body to an open-weight LLM. The JSON schema in `code/schema.py` constrains decoding, and the output is validated with pydantic. Place names are then geocoded with OSM Nominatim (`code/geocode.py`). Incremental: each article is processed once. |
+| fetch | `code/fetch_news.py` | Queries Google News (US + CA editions, interleaved) with the query in `config.yaml`, drops already-seen URLs and syndicated duplicate headlines. Stores metadata only. |
+| extract | `code/extract.py` | Decodes the Google redirect and downloads the article body with `trafilatura` (retried on later runs if it fails), then sends headline + date + body to an open-weight LLM together with a definition of every field. The JSON schema in `code/schema.py` constrains decoding, and the output is validated with pydantic. Place names are then geocoded with OSM Nominatim (`code/geocode.py`). Incremental: each article is processed once. |
 | build | `code/build_map_data.py` | Keeps specific events, merges reports of the same incident, writes GeoJSON for the map and a flat CSV for analysis. |
 
 Run everything: `python code/pipeline.py` (or a single step: `python code/pipeline.py fetch|extract|build`).
 
 ### Extracted fields (`code/schema.py`)
-`is_specific_event`, `multiple_events`, `event_date` (+ precision), `species` (+ evidence),
+`relevance_reasoning`, `real_bear_involved`, `is_specific_event`, `multiple_events`, `event_date` (+ precision), `species` (+ evidence),
 `n_bears`, `conflict_types` / `primary_conflict_type`, `human_activity`, `human_outcome`,
 `n_people_injured/killed`, `bear_outcome`, `location_name`, `admin1`, `country`,
 `location_precision`, `summary`, `confidence`, `notes`. Each row also stores the LLM model,
-whether the extraction used the full text or only the snippet, and the geocoding level
+whether the extraction used the full text, a snippet or only the headline, the extraction version (bumping `EXTRACTION_VERSION` in `schema.py` re-processes all articles), and the geocoding level
 (`place` / `admin1` / `none`) with the matched OSM feature.
 
 ### Design choices

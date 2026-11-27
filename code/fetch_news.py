@@ -1,4 +1,4 @@
-"""Step 1 — query Google News (via `gnews`) and store new articles.
+"""Step 1 — query Google News (via `gnews`) and store new article metadata.
 
 Only metadata (title, snippet, URL, outlet, publication date) is committed
 to the repo. Full text is cached locally in data/cache/ (git-ignored) and
@@ -7,14 +7,14 @@ used transiently by the LLM step, to avoid redistributing copyrighted text.
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from itertools import zip_longest
 from urllib.parse import quote
 
 from gnews import GNews
 
-from common import ARTICLES, CACHE, article_id, append_jsonl, load_config, norm_title, read_jsonl
+from common import ARTICLES, article_id, append_jsonl, load_config, norm_title, read_jsonl
 
 log = logging.getLogger("fetch")
 
@@ -31,7 +31,7 @@ def search(cfg: dict) -> list[dict]:
     # gnews inserts the query into the RSS URL without encoding quotes or
     # parentheses, so encode it ourselves (spaces -> %20, which gnews keeps).
     query = quote(" ".join(s["query"].split()), safe="")
-    hits: list[dict] = []
+    per_edition: list[list[dict]] = []
     for country in s["countries"]:
         gn = GNews(
             language=s["language"],
@@ -44,7 +44,9 @@ def search(cfg: dict) -> list[dict]:
         log.info("Google News %s edition: %d hits", country, len(res))
         for r in res:
             r["_edition"] = country
-        hits.extend(res)
+        per_edition.append(res)
+    # interleave editions so a small max_new_articles still samples all of them
+    hits = [h for group in zip_longest(*per_edition) for h in group if h is not None]
     return hits
 
 
@@ -56,9 +58,9 @@ def resolve_url(gnews_url: str, interval: float) -> str | None:
         out = gnewsdecoder(gnews_url, interval=interval)
         if out.get("status"):
             return out["decoded_url"]
-        log.warning("decode failed: %s", out.get("message"))
+        log.warning("Google News URL decode failed: %s", out.get("message"))
     except Exception as e:  # network / format changes upstream
-        log.warning("decode error: %s", e)
+        log.warning("Google News URL decode error: %r", e)
     return None
 
 
@@ -69,6 +71,7 @@ def download_text(url: str) -> str | None:
         html = trafilatura.fetch_url(url)
         if html:
             return trafilatura.extract(html, include_comments=False, include_tables=False)
+        log.warning("no HTML returned for %s (paywall/bot block?)", url)
     except Exception as e:
         log.warning("download error %s: %s", url, e)
     return None
@@ -105,19 +108,8 @@ def main() -> list[dict]:
         if len(new) >= cfg["search"]["max_new_articles"]:
             break
 
-    ft = cfg["fulltext"]
-    if ft["enabled"]:
-        CACHE.mkdir(parents=True, exist_ok=True)
-        for a in new:
-            a["url"] = resolve_url(a["gnews_url"], ft["request_interval_s"])
-            text = download_text(a["url"]) if a["url"] else None
-            if text and len(text) > 300:
-                (CACHE / f"{a['id']}.txt").write_text(text, encoding="utf-8")
-                a["has_fulltext"] = True
-            time.sleep(ft["request_interval_s"])
-
     append_jsonl(ARTICLES, new)
-    log.info("%d new articles stored (%d with full text)", len(new), sum(a["has_fulltext"] for a in new))
+    log.info("%d new articles stored (full text is retrieved in the extract step)", len(new))
     return new
 
 

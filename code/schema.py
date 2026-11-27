@@ -42,12 +42,27 @@ ConflictType = Literal[
 ]
 
 
+EXTRACTION_VERSION = 2   # bump when schema/prompt change → old rows are re-extracted
+
+
 class Extraction(BaseModel):
+    # Fields are generated in this order under constrained decoding, so the
+    # short reasoning field comes FIRST and conditions the relevance decision.
+    relevance_reasoning: str = Field(
+        description="One or two sentences: does the text describe a real, living bear (the animal) "
+        "physically involved in an incident with people, their property or animals? Note that "
+        "'bear spray' used on people, sports teams (Bears, Bruins, Grizzlies), 'bear market', "
+        "mascots, teddy bears or people nicknamed 'Bear' do NOT involve a bear."
+    )
+    real_bear_involved: bool = Field(
+        description="True only if a real, living bear (the animal) is part of the story."
+    )
     is_specific_event: bool = Field(
-        description="True only if the article reports at least one concrete, real-world interaction "
-        "between people (or their property/animals) and a bear at an identifiable time and place. "
-        "False for general safety advice, policy or management debates, research, opinion, "
-        "hunting-season news, or listicles without a specific incident."
+        description="True only if real_bear_involved is true AND the article reports at least one "
+        "concrete, real-world interaction between people (or their property/animals/vehicles) and a "
+        "bear at an identifiable time and place. False for general safety advice, policy or "
+        "management debates, research, opinion, hunting-season news, or listicles without a "
+        "specific incident."
     )
     multiple_events: bool = Field(
         description="True if the article reports several distinct incidents (e.g. a seasonal round-up). "
@@ -55,26 +70,44 @@ class Extraction(BaseModel):
     )
     event_date: Optional[str] = Field(
         description="Date the incident occurred (YYYY-MM-DD), NOT the publication date. Resolve relative "
-        "expressions ('Tuesday', 'last week') using the publication date provided. null if unknown."
+        "expressions ('Tuesday', 'last week') using the publication date provided. null if the text "
+        "does not say when it happened — never copy the publication date."
     )
     event_date_precision: Literal["day", "week", "month", "unknown"] = Field(
         description="How precisely the article pins down event_date."
     )
-    species: Species = Field(description="Bear species involved. Grizzly = brown bear.")
+    species: Species = Field(
+        description="Bear species involved. 'black bear' (incl. cinnamon/spirit/Kermode) = American black bear; "
+        "'grizzly', 'brown bear', 'Kodiak' = brown/grizzly bear. Use the headline too."
+    )
     species_evidence: Literal["explicitly stated", "inferred from context", "unknown"] = Field(
         description="'explicitly stated' only if the article names the species; 'inferred from context' "
         "if deduced (e.g. region/colour); otherwise 'unknown'."
     )
     n_bears: Optional[int] = Field(description="Number of bears involved (e.g. sow with 2 cubs = 3). null if unknown.")
     conflict_types: list[ConflictType] = Field(
-        description="All conflict categories that apply to the main incident."
+        description="All categories that apply to the main incident. Definitions: "
+        "'physical attack' = the bear made physical contact with a person (incl. maulings, fatal or not); "
+        "'non-contact encounter' = charge, bluff charge or close encounter without contact; "
+        "'property damage' = homes, cabins, vehicles, structures broken into or damaged; "
+        "'food attractant' = garbage, bird feeders, coolers, campsite food; "
+        "'livestock or pet depredation' = bear killed or injured livestock or pets; "
+        "'crop or beehive damage' = crops, orchards, beehives; "
+        "'vehicle collision' = a bear struck by a car, truck or train; "
+        "'bear in human settlement' = bear present in a town/yard with none of the above; "
+        "'other' = none of these."
     )
-    primary_conflict_type: ConflictType = Field(description="The single most severe/central category.")
+    primary_conflict_type: ConflictType = Field(
+        description="The single most severe/central category, using the same definitions."
+    )
     human_activity: Literal[
         "hiking or recreation", "hunting", "camping", "at home or on own property",
         "working", "driving", "other", "unknown", "not applicable"
     ] = Field(description="What the affected person was doing at the time.")
-    human_outcome: Literal["no injury", "injured", "killed", "unknown", "not applicable"]
+    human_outcome: Literal["no injury", "injured", "killed", "unknown", "not applicable"] = Field(
+        description="Worst outcome for people. 'killed' if anyone died (e.g. 'fatally mauled'); "
+        "'not applicable' if no person was directly involved (e.g. bear hit by car, garbage raid)."
+    )
     n_people_injured: Optional[int] = Field(description="null if not reported")
     n_people_killed: Optional[int] = Field(description="null if not reported")
     bear_outcome: Literal[
@@ -83,10 +116,14 @@ class Extraction(BaseModel):
         "being searched for", "unknown"
     ] = Field(description="What happened to the bear(s) as reported.")
     location_name: Optional[str] = Field(
-        description="Most specific place name of the incident, as written in the article "
-        "(town, neighbourhood, park, trail, lake). Do NOT include the state/province here. null if none."
+        description="Most specific GEOGRAPHIC place name of the incident, as written in the article "
+        "(town, neighbourhood, park, trail, lake). Not a business, building or road description "
+        "(for 'a store in Vancouver' write 'Vancouver'). Do NOT include the state/province. null if none."
     )
-    admin1: Optional[str] = Field(description="US state or Canadian province/territory, full name. null if unknown.")
+    admin1: Optional[str] = Field(
+        description="US state or Canadian province/territory, full name (e.g. 'British Columbia', not "
+        "'B.C.'). Fill it if the place clearly implies it. null if unknown."
+    )
     country: Literal["United States", "Canada", "Mexico", "unknown"]
     location_precision: Literal[
         "exact site", "locality", "protected area", "county or district", "state or province", "unknown"
@@ -100,3 +137,20 @@ class Extraction(BaseModel):
 
 def json_schema() -> dict:
     return Extraction.model_json_schema()
+
+
+def field_guide() -> str:
+    """Human-readable definition of every field, injected into the prompt.
+
+    Grammar-constrained decoding (Ollama `format`) restricts *which tokens*
+    the model may emit but never shows it the field descriptions, so the
+    definitions must be in the prompt as well.
+    """
+    lines = []
+    for name, prop in json_schema()["properties"].items():
+        allowed = prop.get("enum") or prop.get("items", {}).get("enum")
+        if not allowed and "anyOf" in prop:
+            allowed = next((p.get("enum") for p in prop["anyOf"] if "enum" in p), None)
+        desc = prop.get("description", "")
+        lines.append(f"- {name}: {desc}" + (f" Allowed: {allowed}." if allowed else ""))
+    return "\n".join(lines)
