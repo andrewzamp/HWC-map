@@ -1,0 +1,80 @@
+"""Thin, backend-agnostic client for open-weight LLMs with structured output.
+
+* ollama : POST /api/chat with `format=<JSON schema>` → grammar-constrained
+           decoding, output is guaranteed schema-valid JSON.
+* openai : any OpenAI-compatible /chat/completions endpoint (Groq, HF router,
+           OpenRouter, vLLM, llama.cpp ...). Uses `json_schema` response_format
+           where supported, falls back to `json_object`.
+Either way the result is validated with pydantic before being accepted.
+"""
+from __future__ import annotations
+
+import json
+import logging
+
+import requests
+from pydantic import BaseModel, ValidationError
+
+log = logging.getLogger("llm")
+
+
+class LLMClient:
+    def __init__(self, cfg: dict):
+        self.backend = cfg["backend"]
+        self.model = cfg["model"]
+        self.base_url = cfg["base_url"].rstrip("/")
+        self.api_key = cfg.get("api_key")
+        self.temperature = cfg.get("temperature", 0)
+        self.num_ctx = cfg.get("num_ctx", 8192)
+        self.max_retries = cfg.get("max_retries", 2)
+
+    # -- backends ---------------------------------------------------------
+    def _ollama(self, messages: list[dict], schema: dict) -> str:
+        r = requests.post(
+            f"{self.base_url}/api/chat",
+            json={
+                "model": self.model,
+                "messages": messages,
+                "format": schema,
+                "stream": False,
+                "options": {"temperature": self.temperature, "num_ctx": self.num_ctx, "seed": 42},
+            },
+            timeout=600,
+        )
+        r.raise_for_status()
+        return r.json()["message"]["content"]
+
+    def _openai(self, messages: list[dict], schema: dict) -> str:
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        body = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "response_format": {"type": "json_schema",
+                                "json_schema": {"name": "extraction", "schema": schema}},
+        }
+        r = requests.post(f"{self.base_url}/chat/completions", json=body, headers=headers, timeout=300)
+        if r.status_code == 400:  # provider without json_schema support
+            body["response_format"] = {"type": "json_object"}
+            r = requests.post(f"{self.base_url}/chat/completions", json=body, headers=headers, timeout=300)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
+
+    # -- public -------------------------------------------------------------
+    def structured(self, system: str, user: str, model_cls: type[BaseModel]) -> BaseModel:
+        schema = model_cls.model_json_schema()
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        call = self._ollama if self.backend == "ollama" else self._openai
+        last_err: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            raw = call(messages, schema)
+            try:
+                return model_cls.model_validate(json.loads(raw))
+            except (json.JSONDecodeError, ValidationError) as e:
+                last_err = e
+                log.warning("invalid output (attempt %d): %s", attempt + 1, str(e)[:300])
+                messages = messages + [
+                    {"role": "assistant", "content": raw},
+                    {"role": "user", "content": f"That output was invalid: {e}. Return corrected JSON only."},
+                ]
+        raise RuntimeError(f"LLM failed to return valid JSON: {last_err}")

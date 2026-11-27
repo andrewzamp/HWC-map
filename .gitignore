@@ -1,0 +1,9 @@
+# article full text: used transiently, never committed (copyright)
+data/cache/
+.ollama-models/
+ollama.log
+__pycache__/
+*.pyc
+.venv/
+.env
+.pytest_cache/

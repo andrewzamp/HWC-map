@@ -1,0 +1,6 @@
+gnews>=0.8.3
+googlenewsdecoder>=0.1.7
+trafilatura>=2.0
+pydantic>=2.6
+requests>=2.31
+pyyaml>=6.0

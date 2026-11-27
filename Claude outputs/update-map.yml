@@ -1,0 +1,88 @@
+name: Update HWC map
+
+on:
+  schedule:
+    - cron: "17 5 * * *"        # daily, 05:17 UTC
+  workflow_dispatch:
+    inputs:
+      max_new_articles:
+        description: "Max new articles this run (overrides config.yaml)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-map
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OLLAMA_MODELS: ${{ github.workspace }}/.ollama-models
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Read model name from config
+        id: cfg
+        run: echo "model=$(python -c "import yaml;print(yaml.safe_load(open('config.yaml'))['llm']['model'])")" >> "$GITHUB_OUTPUT"
+
+      - name: Override article cap
+        if: ${{ github.event.inputs.max_new_articles != '' }}
+        run: sed -i "s/^\(\s*max_new_articles:\).*/\1 ${{ github.event.inputs.max_new_articles }}/" config.yaml
+
+      # 1. fetch first: if there is nothing new we skip the (slow) model setup
+      - name: Fetch news
+        run: python code/pipeline.py fetch
+
+      - name: Check for unprocessed articles
+        id: todo
+        run: |
+          n=$(python -c "import sys; sys.path.insert(0,'code'); from common import *; d={r['id'] for r in read_jsonl(EXTRACTIONS)}; print(sum(a['id'] not in d for a in read_jsonl(ARTICLES)))")
+          echo "n=$n" >> "$GITHUB_OUTPUT"; echo "unprocessed articles: $n"
+
+      - name: Cache Ollama model
+        if: steps.todo.outputs.n != '0'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OLLAMA_MODELS }}
+          key: ollama-${{ steps.cfg.outputs.model }}
+
+      - name: Install and start Ollama
+        if: steps.todo.outputs.n != '0'
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          sudo systemctl stop ollama || true      # use our own server with OLLAMA_MODELS
+          nohup ollama serve > ollama.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:11434/api/version && break; sleep 1; done
+          ollama pull "${{ steps.cfg.outputs.model }}"
+
+      # 2. LLM extraction + geocoding
+      - name: Extract metadata
+        if: steps.todo.outputs.n != '0'
+        run: python code/pipeline.py extract
+
+      # 3. Always rebuild (cheap) so config changes to dedup etc. propagate
+      - name: Build map data
+        run: python code/pipeline.py build
+
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/articles.jsonl data/extractions.jsonl data/geocode_cache.json data/events.csv docs/data/events.geojson
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "data: update $(date -u +%Y-%m-%d) [skip ci]"
+          git push

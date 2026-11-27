@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HWC-map · Human–bear conflict in North America</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>HWC-map</h1>
+      <span class="sub">Human–bear conflict events in North America, mined from online news</span>
+    </div>
+    <div class="meta" id="meta">loading…</div>
+  </header>
+
+  <main>
+    <aside id="sidebar">
+      <section>
+        <input id="search" type="search" placeholder="Search summary, place, outlet…">
+      </section>
+
+      <section>
+        <h2>Species</h2>
+        <div id="f-species" class="checks"></div>
+      </section>
+
+      <section>
+        <h2>Conflict type <small>(any of)</small></h2>
+        <div id="f-conflict" class="checks"></div>
+      </section>
+
+      <section>
+        <h2>Human outcome</h2>
+        <div id="f-human" class="checks"></div>
+      </section>
+
+      <section>
+        <h2>Bear outcome</h2>
+        <div id="f-bear" class="checks"></div>
+      </section>
+
+      <section>
+        <h2>Event date</h2>
+        <div class="daterow">
+          <input type="date" id="d-from"> <span>–</span> <input type="date" id="d-to">
+        </div>
+      </section>
+
+      <section>
+        <h2>Data quality</h2>
+        <label class="chk"><input type="checkbox" id="q-region" checked> include region-level locations</label>
+        <label class="chk"><input type="checkbox" id="q-low" checked> include low-confidence extractions</label>
+        <label class="chk"><input type="checkbox" id="q-cluster" checked> cluster nearby markers</label>
+      </section>
+
+      <section class="row">
+        <button id="reset">Reset filters</button>
+        <button id="download">Download filtered (GeoJSON)</button>
+      </section>
+
+      <section>
+        <h2><span id="count">0</span> events</h2>
+        <ol id="list"></ol>
+      </section>
+    </aside>
+
+    <div id="map"></div>
+
+    <aside id="detail" class="hidden">
+      <button id="close" aria-label="Close">×</button>
+      <div id="detail-body"></div>
+    </aside>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
