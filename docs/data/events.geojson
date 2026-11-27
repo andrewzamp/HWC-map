@@ -1,13 +1,13 @@
 {
  "type": "FeatureCollection",
  "metadata": {
-  "generated_at": "2026-11-27T14:07:31+00:00",
-  "n_articles": 65,
-  "n_articles_processed": 40,
-  "n_articles_not_events": 30,
+  "generated_at": "2026-11-27T18:27:39+00:00",
+  "n_articles": 67,
+  "n_articles_processed": 67,
+  "n_articles_not_events": 56,
   "n_out_of_region": 0,
   "n_event_reports_not_geocoded": 2,
-  "n_events": 8,
+  "n_events": 9,
   "dedup": {
    "max_distance_km": 30,
    "max_days_apart": 3
@@ -256,6 +256,66 @@
       "publisher": "The Ashcroft-Cache Creek Journal",
       "published": "2026-11-25T02:36:16+00:00",
       "source": "googlenews"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -98.7375358,
+     33.192915
+    ]
+   },
+   "properties": {
+    "animal_name": "oso negro",
+    "taxon": "American black bear",
+    "taxon_scientific": "Ursus americanus",
+    "taxon_rank": "species",
+    "taxon_group": "Bears",
+    "taxon_family": "Ursidae",
+    "taxon_check": "agree",
+    "taxon_llm": "American black bear",
+    "taxon_evidence_source": "animal name",
+    "n_animals": null,
+    "conflict_types": [
+     "property damage",
+     "animal in human settlement"
+    ],
+    "primary_conflict_type": "property damage",
+    "human_activity": "unknown",
+    "human_outcome": "not applicable",
+    "n_people_injured": null,
+    "n_people_killed": null,
+    "domestic_animal_type": "unknown",
+    "domestic_animal_outcome": "not applicable",
+    "rabies_status": "not mentioned",
+    "animal_outcome": "no action",
+    "location_name": "Newcastle",
+    "admin1": null,
+    "country": "United States",
+    "geocode_level": "place",
+    "geocode_match": "Newcastle, Young County, Texas, United States",
+    "summary": "A bear was spotted on camera in Newcastle, California, where it knocked over a neighbor's trash and destroyed a fence. This was the first time a bear had been seen on the property in over three decades.",
+    "confidence": "high",
+    "event_date_precision": "day",
+    "multiple_events": false,
+    "text_source": "fulltext",
+    "llm_model": "qwen2.5:7b-instruct",
+    "event_id": "bcad93bb685d468f",
+    "date": "2026-11-22",
+    "date_is_publication_date": false,
+    "date_source": null,
+    "n_reports": 1,
+    "sources": [
+     {
+      "title": "Watch : Bear spotted on camera in Newcastle",
+      "url": "https://www.kcra.com/article/watch-bear-spotted-on-camera-in-newcastle/74536366",
+      "publisher": "kcra.com",
+      "published": "2026-11-26T03:15:00+00:00",
+      "source": "gdelt"
      }
     ]
    }

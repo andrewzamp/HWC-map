@@ -140,6 +140,53 @@
   }
  ],
  "New Mexico, unknown, United States": [],
+ "Newcastle, United States": [
+  {
+   "addresstype": "village",
+   "country_code": "us",
+   "display_name": "Newcastle, Young County, Texas, United States",
+   "lat": 33.192915,
+   "lon": -98.7375358,
+   "state": "Texas",
+   "type": "administrative"
+  },
+  {
+   "addresstype": "town",
+   "country_code": "us",
+   "display_name": "Newcastle, Weston County, Wyoming, United States",
+   "lat": 43.8547459,
+   "lon": -104.2051256,
+   "state": "Wyoming",
+   "type": "administrative"
+  },
+  {
+   "addresstype": "village",
+   "country_code": "us",
+   "display_name": "Newcastle, King County, Washington, United States",
+   "lat": 47.5395736,
+   "lon": -122.1563331,
+   "state": "Washington",
+   "type": "administrative"
+  },
+  {
+   "addresstype": "town",
+   "country_code": "us",
+   "display_name": "Newcastle, Lincoln County, Maine, 04553, United States",
+   "lat": 44.0342308,
+   "lon": -69.535862,
+   "state": "Maine",
+   "type": "administrative"
+  },
+  {
+   "addresstype": "city",
+   "country_code": "us",
+   "display_name": "Newcastle, McClain County, Oklahoma, 73065, United States",
+   "lat": 35.2472869,
+   "lon": -97.59976,
+   "state": "Oklahoma",
+   "type": "administrative"
+  }
+ ],
  "Vancouver vape store, British Columbia, Canada": [],
  "highway near B.C. provincial park, British Columbia, Canada": [],
  "lago Tahoe, United States": [
