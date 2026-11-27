@@ -1,6 +1,7 @@
 {
  "British Columbia, Canada": [
   {
+   "addresstype": "state",
    "country_code": "ca",
    "display_name": "British Columbia, Canada",
    "lat": 55.001251,
@@ -9,10 +10,116 @@
    "type": "administrative"
   }
  ],
+ "Cerro de la Silla, Mexico": [
+  {
+   "addresstype": "ridge",
+   "country_code": "mx",
+   "display_name": "Cerro de La Silla, Monterrey, Nuevo León, México",
+   "lat": 25.6079551,
+   "lon": -100.2365438,
+   "state": "Nuevo León",
+   "type": "ridge"
+  },
+  {
+   "addresstype": "residential",
+   "country_code": "mx",
+   "display_name": "Cerro de la Silla, Monterrey, Nuevo León, México",
+   "lat": 25.6555431,
+   "lon": -100.2903354,
+   "state": "Nuevo León",
+   "type": "residential"
+  },
+  {
+   "addresstype": "residential",
+   "country_code": "mx",
+   "display_name": "Cerro de La Silla, Guadalupe, Nuevo León, México",
+   "lat": 25.6693765,
+   "lon": -100.1920842,
+   "state": "Nuevo León",
+   "type": "residential"
+  },
+  {
+   "addresstype": "residential",
+   "country_code": "mx",
+   "display_name": "Cerro de la Silla, Almaguer, Guadalupe, Nuevo León, 67182, México",
+   "lat": 25.6556606,
+   "lon": -100.2209571,
+   "state": "Nuevo León",
+   "type": "residential"
+  },
+  {
+   "addresstype": "residential",
+   "country_code": "mx",
+   "display_name": "Cerro de la Silla, Valles de Guadalupe, Guadalupe, Nuevo León, 67170, México",
+   "lat": 25.6579836,
+   "lon": -100.2334687,
+   "state": "Nuevo León",
+   "type": "residential"
+  }
+ ],
  "Goldstream Park, unknown, Canada": [],
+ "Lake Tahoe, United States": [
+  {
+   "addresstype": "lake",
+   "country_code": "us",
+   "display_name": "Lake Tahoe, Placer County, California, United States",
+   "lat": 39.0885405,
+   "lon": -120.0503528,
+   "state": "California",
+   "type": "lake"
+  },
+  {
+   "addresstype": "lake",
+   "country_code": "us",
+   "display_name": "Lake Tahoe, Freeman Township, Clare County, Michigan, United States",
+   "lat": 43.9387986,
+   "lon": -85.0404394,
+   "state": "Michigan",
+   "type": "lake"
+  },
+  {
+   "addresstype": "lake",
+   "country_code": "us",
+   "display_name": "Lake Tahoe, Town of Mercer, Iron County, Wisconsin, United States",
+   "lat": 46.1658409,
+   "lon": -90.0867261,
+   "state": "Wisconsin",
+   "type": "lake"
+  },
+  {
+   "addresstype": "reservoir",
+   "country_code": "us",
+   "display_name": "Lake Tahoe, Fulton County, Georgia, United States",
+   "lat": 33.5542372,
+   "lon": -84.4823817,
+   "state": "Georgia",
+   "type": "reservoir"
+  },
+  {
+   "addresstype": "reservoir",
+   "country_code": "us",
+   "display_name": "Lake Tahoe, Buckingham County, Virginia, United States",
+   "lat": 37.6842165,
+   "lon": -78.3214957,
+   "state": "Virginia",
+   "type": "reservoir"
+  }
+ ],
+ "New Mexico, United States": [
+  {
+   "addresstype": "state",
+   "country_code": "us",
+   "display_name": "New Mexico, United States",
+   "lat": 34.5802074,
+   "lon": -105.996047,
+   "state": "New Mexico",
+   "type": "administrative"
+  }
+ ],
  "New Mexico, unknown, United States": [],
  "Vancouver vape store, British Columbia, Canada": [],
  "highway near B.C. provincial park, British Columbia, Canada": [],
+ "near Goldstream Park, Canada": [],
  "unknown, Canada": [
   {
    "country_code": "ca",

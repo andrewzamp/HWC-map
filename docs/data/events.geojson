@@ -1,19 +1,144 @@
 {
  "type": "FeatureCollection",
  "metadata": {
-  "generated_at": "2026-11-27T11:21:07+00:00",
-  "n_articles": 5,
-  "n_articles_processed": 5,
-  "n_articles_not_events": 1,
-  "n_event_reports_not_geocoded": 2,
-  "n_events": 1,
+  "generated_at": "2026-11-27T12:29:35+00:00",
+  "n_articles": 25,
+  "n_articles_processed": 25,
+  "n_articles_not_events": 17,
+  "n_event_reports_not_geocoded": 4,
+  "n_events": 4,
   "dedup": {
    "max_distance_km": 30,
-   "max_days_apart": 3,
-   "same_species_required": true
+   "max_days_apart": 3
+  },
+  "group_colors": {
+   "Bears": "#D55E00",
+   "Wolves, coyotes & foxes": "#0072B2",
+   "Wild cats": "#E69F00",
+   "Weasel family": "#009E73",
+   "Raccoons & coatis": "#CC79A7",
+   "Skunks": "#56B4E9",
+   "Other carnivores": "#999999",
+   "Unknown": "#BBBBBB"
   }
  },
  "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -105.996047,
+     34.5802074
+    ]
+   },
+   "properties": {
+    "animal_name": "oso negro",
+    "taxon": "American black bear",
+    "taxon_scientific": "Ursus americanus",
+    "taxon_rank": "species",
+    "taxon_group": "Bears",
+    "taxon_family": "Ursidae",
+    "taxon_evidence": "inferred from context",
+    "taxon_check": "agree",
+    "n_animals": null,
+    "conflict_types": [
+     "physical attack"
+    ],
+    "primary_conflict_type": "physical attack",
+    "human_activity": "at home or on own property",
+    "human_outcome": "killed",
+    "n_people_injured": null,
+    "n_people_killed": 1,
+    "domestic_animal_type": "unknown",
+    "domestic_animal_outcome": "not applicable",
+    "rabies_status": "not mentioned",
+    "animal_outcome": "killed by authorities",
+    "location_name": "New Mexico",
+    "admin1": null,
+    "country": "United States",
+    "location_precision": "state or province",
+    "geocode_level": "admin1",
+    "geocode_match": "New Mexico, United States",
+    "summary": "A man in New Mexico hid in a crawlspace after finding a bear that fatally mauled his stepfather.",
+    "confidence": "medium",
+    "notes": null,
+    "event_date_precision": "unknown",
+    "multiple_events": false,
+    "text_source": "headline",
+    "llm_model": "qwen2.5:7b-instruct",
+    "event_id": "252b5b804de62c7d",
+    "date": "2026-11-27",
+    "date_is_publication_date": true,
+    "n_reports": 1,
+    "sources": [
+     {
+      "title": "New Mexico man hides in crawlspace after finding bear that fatally mauled his stepfather - The Cool Down",
+      "url": "https://news.google.com/rss/articles/CBMihgFBVV95cUxQS1RQUVlCcDZtZXRIbmRMVmEwWUhQbGhsZEZEZDIwbHc1dUdSTWM2QnhkdnBhRjk3bTRLZXFGQVRMWjVvSGNWdDBqMzRMcHlPek5HdW5FdkYzNExCZG5nUU9QZzBLT3AxR0hlclV0WVBYZ2ZKTHdiTDB1bmhRU2s3ZlFoakt6UQ?oc=5&hl=en-US&gl=US&ceid=US:en",
+      "publisher": "The Cool Down",
+      "published": "2026-11-27T01:29:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -100.2365438,
+     25.6079551
+    ]
+   },
+   "properties": {
+    "animal_name": "coatí",
+    "taxon": "white-nosed coati",
+    "taxon_scientific": "Nasua narica",
+    "taxon_rank": "species",
+    "taxon_group": "Raccoons & coatis",
+    "taxon_family": "Procyonidae",
+    "taxon_evidence": "inferred from context",
+    "taxon_check": "agree",
+    "n_animals": null,
+    "conflict_types": [
+     "physical attack"
+    ],
+    "primary_conflict_type": "physical attack",
+    "human_activity": "unknown",
+    "human_outcome": "injured",
+    "n_people_injured": null,
+    "n_people_killed": null,
+    "domestic_animal_type": "not applicable",
+    "domestic_animal_outcome": "not applicable",
+    "rabies_status": "not mentioned",
+    "animal_outcome": "unknown",
+    "location_name": "Cerro de la Silla",
+    "admin1": null,
+    "country": "Mexico",
+    "location_precision": "locality",
+    "geocode_level": "place",
+    "geocode_match": "Cerro de La Silla, Monterrey, Nuevo León, México",
+    "summary": "A young person was attacked by a coatí in Cerro de la Silla, requiring stitches.",
+    "confidence": "medium",
+    "notes": null,
+    "event_date_precision": "unknown",
+    "multiple_events": false,
+    "text_source": "headline",
+    "llm_model": "qwen2.5:7b-instruct",
+    "event_id": "80efe5ea66bd8243",
+    "date": "2026-11-26",
+    "date_is_publication_date": true,
+    "n_reports": 1,
+    "sources": [
+     {
+      "title": "Lo ataca coatí en el Cerro de la Silla; joven requiere puntos de sutura - Hora Cero Web",
+      "url": "https://news.google.com/rss/articles/CBMiakFVX3lxTE8zNVQ2bVlQQlotak1HLXI2c2NQQjUtZjVHUnhWX0hIQ0FlN19MZUxJRjNLeFRPODBibHFsQTdiOVVYU1A4VkxNRUN2YlhRMmphN1gxbDZWcXN1VEl0ZVFYODUwOWlVUTNGYXc?oc=5&hl=en-US&gl=US&ceid=US:en",
+      "publisher": "Hora Cero Web",
+      "published": "2026-11-26T17:20:42+00:00"
+     }
+    ]
+   }
+  },
   {
    "type": "Feature",
    "geometry": {
@@ -24,48 +149,108 @@
     ]
    },
    "properties": {
-    "species": "unknown bear species",
-    "species_evidence": "unknown",
-    "n_bears": 1,
+    "animal_name": null,
+    "taxon": "gray wolf",
+    "taxon_scientific": "Canis lupus",
+    "taxon_rank": "species",
+    "taxon_group": "Wolves, coyotes & foxes",
+    "taxon_family": "Canidae",
+    "taxon_evidence": "unknown",
+    "taxon_check": "no dictionary match",
+    "n_animals": null,
     "conflict_types": [
-     "property damage"
+     "physical attack"
     ],
-    "primary_conflict_type": "property damage",
+    "primary_conflict_type": "physical attack",
     "human_activity": "unknown",
-    "human_outcome": "unknown",
+    "human_outcome": "killed",
     "n_people_injured": null,
-    "n_people_killed": null,
-    "bear_outcome": "unknown",
-    "location_name": "Vancouver vape store",
+    "n_people_killed": 2,
+    "domestic_animal_type": "not applicable",
+    "domestic_animal_outcome": "not applicable",
+    "rabies_status": "not mentioned",
+    "animal_outcome": "killed by authorities",
+    "location_name": null,
     "admin1": "British Columbia",
     "country": "Canada",
-    "location_precision": "locality",
+    "location_precision": "state or province",
     "geocode_level": "admin1",
     "geocode_match": "British Columbia, Canada",
-    "summary": "A video shows a bear-spray attack on a worker at a vape store in Vancouver, British Columbia, Canada.",
-    "confidence": "low",
-    "notes": "Full text unavailable, details are based on the headline and snippet only.",
-    "event_date_precision": "day",
+    "summary": "Officials in British Columbia report that four grizzly bears were responsible for the fatal attack on a mother and daughter.",
+    "confidence": "high",
+    "notes": null,
+    "event_date_precision": "unknown",
     "multiple_events": false,
-    "text_source": "snippet",
+    "text_source": "headline",
     "llm_model": "qwen2.5:7b-instruct",
-    "event_id": "82d00d27d2b91bf0",
-    "species_scientific": "Ursus sp.",
-    "date": "2026-11-26",
-    "date_is_publication_date": false,
-    "n_reports": 2,
+    "event_id": "21f0544341973baf",
+    "date": "2026-11-10",
+    "date_is_publication_date": true,
+    "n_reports": 1,
     "sources": [
      {
-      "title": "2 bear cubs struck, killed by vehicle on highway near B.C. provincial park - The Ashcroft-Cache Creek Journal",
-      "url": "https://news.google.com/rss/articles/CBMivwFBVV95cUxPbks1VjlNdVJRSl9CSDdaYnNRZm9QbldYWGphT0phZUlya3E1a1pjTTl3dEJTazdBZ0ZMRXh4bjR4cGU0ZHpIZlZ5dktBWGp0cUg5aURWd3pTcDJKdVFhRVp0X1N5UklFWlg4SE5reEpxOGFwclVqVHNNNVpWZWw1YlZITHBUT0Z4VEhNdWpNZU5KNlI3QUNqM3FYQjVTT2hjU3oydjRJd3ZZNklRY1liYkpOc1l4WmJlMDc4Um9qWQ?oc=5&hl=en-US&gl=US&ceid=US:en",
-      "publisher": "The Ashcroft-Cache Creek Journal",
-      "published": "2026-11-25T02:36:16+00:00"
-     },
+      "title": "4 grizzly bears responsible for killing mother and daughter in B.C., officials say - CBC",
+      "url": "https://news.google.com/rss/articles/CBMinAFBVV95cUxPVjhSWTJtVE5LWnpHMnowNnMxb3F5ZXZRbV82TnlZUjhFSkZKeEdHWldDN3VQTG9iZkRfRWc1N0hJU3BvR3RtRWZmTHdkVkR4RjdjUlB0ZEU4T21xNHBVZUtVbGVxOEI1YlBXaV90Y1BOU2JvSHBqZWtEVU1US0lqX1VhQTROSzFLNDA4MzdBTjBTTUJQX2RNWnBrVk8?oc=5&hl=en-US&gl=US&ceid=US:en",
+      "publisher": "CBC",
+      "published": "2026-11-10T08:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -120.0503528,
+     39.0885405
+    ]
+   },
+   "properties": {
+    "animal_name": "otter",
+    "taxon": "North American river otter",
+    "taxon_scientific": "Lontra canadensis",
+    "taxon_rank": "species",
+    "taxon_group": "Weasel family",
+    "taxon_family": "Mustelidae",
+    "taxon_evidence": "inferred from context",
+    "taxon_check": "llm more specific",
+    "n_animals": null,
+    "conflict_types": [
+     "physical attack"
+    ],
+    "primary_conflict_type": "physical attack",
+    "human_activity": "unknown",
+    "human_outcome": "injured",
+    "n_people_injured": null,
+    "n_people_killed": null,
+    "domestic_animal_type": "unknown",
+    "domestic_animal_outcome": "unknown",
+    "rabies_status": "not mentioned",
+    "animal_outcome": "unknown",
+    "location_name": "Lake Tahoe",
+    "admin1": null,
+    "country": "United States",
+    "location_precision": "locality",
+    "geocode_level": "place",
+    "geocode_match": "Lake Tahoe, Placer County, California, United States",
+    "summary": "A swim instructor at Lake Tahoe recounts being attacked by a rare river otter, requiring 38 stitches.",
+    "confidence": "medium",
+    "notes": null,
+    "event_date_precision": "unknown",
+    "multiple_events": false,
+    "text_source": "headline",
+    "llm_model": "qwen2.5:7b-instruct",
+    "event_id": "da9efbdda5b5aac9",
+    "date": "2026-09-01",
+    "date_is_publication_date": true,
+    "n_reports": 1,
+    "sources": [
      {
-      "title": "Video shows bear-spray attack on Vancouver vape store worker - CTV News",
-      "url": "https://news.google.com/rss/articles/CBMipAFBVV95cUxNd1lTNk9acFhsS1VZZUo5cmh2d3huRUxvb3lRVHdVc2ZXa3hoQ2I0OXhnUDU2ZjJERmJyYkQ0YUZvZlJabi12dElCeTc4X0FKNDZ4U1VkZ255TVZQRlVIMVVrWVp1azJNdnRibWNWcjI4clY5eE1ZQzMxNjVlRFpHMno1eVZkam5UOGdiNWtHYlVOWXhQY1pmWUJIX3o5enAyS1FKYw?oc=5&hl=en-US&gl=US&ceid=US:en",
-      "publisher": "CTV News",
-      "published": "2026-11-26T20:04:56+00:00"
+      "title": "Lake Tahoe swim instructor recounts rare river otter attack, receiving 38 stitches - ABC7 Bay Area",
+      "url": "https://news.google.com/rss/articles/CBMiuAFBVV95cUxOb0Yxcmc0cEZ2V3BoMHFvLS13aFczSDgzSjdjQ21zRnIzRUpyODAyTWIxMFZ4SkFaaUpWc1BSTnFWbUEtYnE1Yml0S09ZTmFoaDg0aFhmRk1HUU1iQUhsUmFKTEdtWS1GZXBRN0VMMThvTkFENVRiTE5ZR01qSzh5ZUw3b1QxZUR3R3VIaWJoamZmSlBhOXpMUXhLV1ZaREFhVG94bEoyWU9iUHEyVGtpQkFCWm5od0Rq0gG-AUFVX3lxTFBkUUVrOFpHYjAxbmJRTUFHVGY4c0EwWm00SV9uOGNudmRKaWMtcy1icjkxWF9nTjhyZkd2Z3RrQTRSY3JTOVdsUXR1bGlHSVVwTTkwUmxBa1NkbU5ka1AzSlRiQ3F3TXBHTkNaYXFrR2pZOU9tQlNXX1piN004djJ5cnR0SnFtamo5N1FkUDVDZXZncmJQYjAyQXFWcVZ6OGw0U19tRnVpVmxNTjM2NUR1T2lqV3VZRWFCMC1LWGc?oc=5&hl=en-US&gl=US&ceid=US:en",
+      "publisher": "ABC7 Bay Area",
+      "published": "2026-09-01T07:00:00+00:00"
      }
     ]
    }
