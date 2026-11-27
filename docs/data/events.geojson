@@ -1,1 +1,74 @@
-{"type":"FeatureCollection","metadata":{"n_events":0,"n_articles_processed":0,"generated_at":""},"features":[]}
+{
+ "type": "FeatureCollection",
+ "metadata": {
+  "generated_at": "2026-11-27T11:21:07+00:00",
+  "n_articles": 5,
+  "n_articles_processed": 5,
+  "n_articles_not_events": 1,
+  "n_event_reports_not_geocoded": 2,
+  "n_events": 1,
+  "dedup": {
+   "max_distance_km": 30,
+   "max_days_apart": 3,
+   "same_species_required": true
+  }
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -125.002441,
+     55.001251
+    ]
+   },
+   "properties": {
+    "species": "unknown bear species",
+    "species_evidence": "unknown",
+    "n_bears": 1,
+    "conflict_types": [
+     "property damage"
+    ],
+    "primary_conflict_type": "property damage",
+    "human_activity": "unknown",
+    "human_outcome": "unknown",
+    "n_people_injured": null,
+    "n_people_killed": null,
+    "bear_outcome": "unknown",
+    "location_name": "Vancouver vape store",
+    "admin1": "British Columbia",
+    "country": "Canada",
+    "location_precision": "locality",
+    "geocode_level": "admin1",
+    "geocode_match": "British Columbia, Canada",
+    "summary": "A video shows a bear-spray attack on a worker at a vape store in Vancouver, British Columbia, Canada.",
+    "confidence": "low",
+    "notes": "Full text unavailable, details are based on the headline and snippet only.",
+    "event_date_precision": "day",
+    "multiple_events": false,
+    "text_source": "snippet",
+    "llm_model": "qwen2.5:7b-instruct",
+    "event_id": "82d00d27d2b91bf0",
+    "species_scientific": "Ursus sp.",
+    "date": "2026-11-26",
+    "date_is_publication_date": false,
+    "n_reports": 2,
+    "sources": [
+     {
+      "title": "2 bear cubs struck, killed by vehicle on highway near B.C. provincial park - The Ashcroft-Cache Creek Journal",
+      "url": "https://news.google.com/rss/articles/CBMivwFBVV95cUxPbks1VjlNdVJRSl9CSDdaYnNRZm9QbldYWGphT0phZUlya3E1a1pjTTl3dEJTazdBZ0ZMRXh4bjR4cGU0ZHpIZlZ5dktBWGp0cUg5aURWd3pTcDJKdVFhRVp0X1N5UklFWlg4SE5reEpxOGFwclVqVHNNNVpWZWw1YlZITHBUT0Z4VEhNdWpNZU5KNlI3QUNqM3FYQjVTT2hjU3oydjRJd3ZZNklRY1liYkpOc1l4WmJlMDc4Um9qWQ?oc=5&hl=en-US&gl=US&ceid=US:en",
+      "publisher": "The Ashcroft-Cache Creek Journal",
+      "published": "2026-11-25T02:36:16+00:00"
+     },
+     {
+      "title": "Video shows bear-spray attack on Vancouver vape store worker - CTV News",
+      "url": "https://news.google.com/rss/articles/CBMipAFBVV95cUxNd1lTNk9acFhsS1VZZUo5cmh2d3huRUxvb3lRVHdVc2ZXa3hoQ2I0OXhnUDU2ZjJERmJyYkQ0YUZvZlJabi12dElCeTc4X0FKNDZ4U1VkZ255TVZQRlVIMVVrWVp1azJNdnRibWNWcjI4clY5eE1ZQzMxNjVlRFpHMno1eVZkam5UOGdiNWtHYlVOWXhQY1pmWUJIX3o5enAyS1FKYw?oc=5&hl=en-US&gl=US&ceid=US:en",
+      "publisher": "CTV News",
+      "published": "2026-11-26T20:04:56+00:00"
+     }
+    ]
+   }
+  }
+ ]
+}

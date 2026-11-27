@@ -1,0 +1,100 @@
+{
+ "British Columbia, Canada": [
+  {
+   "country_code": "ca",
+   "display_name": "British Columbia, Canada",
+   "lat": 55.001251,
+   "lon": -125.002441,
+   "state": "British Columbia",
+   "type": "administrative"
+  }
+ ],
+ "Goldstream Park, unknown, Canada": [],
+ "New Mexico, unknown, United States": [],
+ "Vancouver vape store, British Columbia, Canada": [],
+ "highway near B.C. provincial park, British Columbia, Canada": [],
+ "unknown, Canada": [
+  {
+   "country_code": "ca",
+   "display_name": "Unknown, Petitcodiac, Salisbury Parish, Community of Three Rivers, Westmorland County, New Brunswick / Nouveau-Brunswick, Canada",
+   "lat": 45.9546198,
+   "lon": -65.1695027,
+   "state": "New Brunswick / Nouveau-Brunswick",
+   "type": "cemetery"
+  },
+  {
+   "country_code": "ca",
+   "display_name": "unknown, Indigo Shores, Middle Sackville, Halifax Regional Municipality, Halifax County, Nova Scotia, B4E 0X2, Canada",
+   "lat": 44.7975517,
+   "lon": -63.7650119,
+   "state": "Nova Scotia",
+   "type": "residential"
+  },
+  {
+   "country_code": "ca",
+   "display_name": "Unknown, Rural Municipality of Eastern Kings, Kings County, Prince Edward Island, Canada",
+   "lat": 46.4703499,
+   "lon": -62.2536998,
+   "state": "Prince Edward Island",
+   "type": "track"
+  },
+  {
+   "country_code": "ca",
+   "display_name": "Unknown, Fort Nelson, Northern Rockies Regional Municipality, British Columbia, Canada",
+   "lat": 58.8065354,
+   "lon": -122.6946751,
+   "state": "British Columbia",
+   "type": "residential"
+  },
+  {
+   "country_code": "ca",
+   "display_name": "Unknown, St. Nicholas, Rural Municipality of St. Nicholas, Prince County, Prince Edward Island, Canada",
+   "lat": 46.3985138,
+   "lon": -63.956937,
+   "state": "Prince Edward Island",
+   "type": "track"
+  }
+ ],
+ "unknown, United States": [
+  {
+   "country_code": "us",
+   "display_name": "Unknown, Amarillo, Potter County, Texas, United States",
+   "lat": 35.2339725,
+   "lon": -101.8910873,
+   "state": "Texas",
+   "type": "lake"
+  },
+  {
+   "country_code": "us",
+   "display_name": "Unknown, Snohomish County, Washington, United States",
+   "lat": 48.2747559,
+   "lon": -121.7424883,
+   "state": "Washington",
+   "type": "stream"
+  },
+  {
+   "country_code": "us",
+   "display_name": "unknown, Cabell County, West Virginia, United States",
+   "lat": 38.5366413,
+   "lon": -82.2753993,
+   "state": "West Virginia",
+   "type": "cemetery"
+  },
+  {
+   "country_code": "us",
+   "display_name": "Unknown, Fountain City, Knoxville, Knox County, East Tennessee, Tennessee, 37198, United States",
+   "lat": 36.0316719,
+   "lon": -83.9325583,
+   "state": "Tennessee",
+   "type": "residential"
+  },
+  {
+   "country_code": "us",
+   "display_name": "Unknown, Parkridge, Knoxville, Knox County, East Tennessee, Tennessee, 37915, United States",
+   "lat": 35.9789595,
+   "lon": -83.9115161,
+   "state": "Tennessee",
+   "type": "residential"
+  }
+ ]
+}
