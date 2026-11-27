@@ -21,14 +21,14 @@ from schema import Extraction, Triage, json_schema  # noqa: E402
 def _ex(**kw):
     base = dict(relevance_reasoning="A coyote attacked a dog.", real_wild_carnivore_involved=True,
                 is_specific_event=True, multiple_events=False, animal_name="coyote", taxon="coyote",
-                taxon_evidence="explicitly stated", n_animals=1, event_date="2026-10-01",
+                n_animals=1, event_date="2026-10-01",
                 event_date_precision="day", conflict_types=["livestock or pet depredation"],
                 primary_conflict_type="livestock or pet depredation", human_activity="walking a pet",
                 human_outcome="no injury", n_people_injured=None, n_people_killed=None,
                 domestic_animal_type="pets", domestic_animal_outcome="injured",
                 rabies_status="not mentioned", animal_outcome="no action",
                 location_name="Testville", admin1="Colorado", country="United States",
-                location_precision="locality", summary="Synthetic.", confidence="high", notes=None)
+                summary="Synthetic.", confidence="high")
     base.update(kw)
     return base
 
@@ -85,14 +85,41 @@ def test_match_name(name, expected):
     assert taxa.match_name(name) == expected
 
 
-def test_resolve_flags():
+def test_resolve_text_evidence_wins():
     assert taxa.resolve("cougar", "mountain lion")["taxon_check"] == "agree"
     r = taxa.resolve("unidentified wolves, coyotes & foxes", "coyote")
-    assert r["taxon"] == "coyote" and r["taxon_check"] == "dictionary more specific"
-    assert taxa.resolve("gray fox", "fox")["taxon_check"] == "llm more specific"
+    assert r["taxon"] == "coyote" and r["taxon_check"] == "text more specific"
+    # generic name: the LLM's species pick is NOT accepted without textual support
+    r = taxa.resolve("gray fox", "fox")
+    assert r["taxon"] == "unidentified wolves, coyotes & foxes" and r["taxon_llm"] == "gray fox"
     r = taxa.resolve("cougar", "bobcat")
-    assert r["taxon"] == "cougar" and r["taxon_check"] == "disagree"   # kept, but flagged
-    assert taxa.resolve("cougar", "mountain lion")["taxon_scientific"] == "Puma concolor"
+    assert r["taxon"] == "bobcat" and r["taxon_check"] == "disagree"
+    assert taxa.resolve("other wild carnivore", None, "no names here")["taxon_check"] == "llm only (no text evidence)"
+
+
+# Real mistakes from the 2026-11-27 run (headline-only extractions by qwen2.5:7b)
+@pytest.mark.parametrize("llm,name,headline,expected", [
+    ("gray wolf", None, "4 grizzly bears responsible for killing mother and daughter in B.C., officials say", "brown bear"),
+    ("unidentified skunks", None, "Fighting raccoon rabies", "raccoon"),
+    ("striped skunk", "skunk", "Two veterinary workers receive boosters after dog kills rabid skunk", "unidentified skunks"),
+    ("North American river otter", "otter", "Lake Tahoe swim instructor recounts rare river otter attack",
+     "North American river otter"),
+    ("American black bear", "bear", "A bear wandered into town; officers said the black bear was relocated",
+     "American black bear"),
+])
+def test_resolve_regressions(llm, name, headline, expected):
+    assert taxa.resolve(llm, name, headline)["taxon"] == expected
+
+
+def test_scan_ignores_sports_plurals():
+    assert taxa.scan_text("Lions lose to Chicago Cubs") == []
+
+
+def test_clean_place():
+    from geocode import clean_place
+    assert clean_place("near Goldstream Park") == "Goldstream Park"
+    assert clean_place("condado de Guilford") == "Guilford County"
+    assert clean_place("North Vancouver") == "North Vancouver"     # real names untouched
 
 
 def test_queries_cover_groups_and_editions():
@@ -116,7 +143,7 @@ def test_triage_irrelevant_skips_extraction(tmp_path, monkeypatch):
     class FakeLLM:
         def __init__(self, cfg): pass
         def runtime_version(self): return "ollama test"
-        def structured(self, system, user, cls):
+        def structured(self, system, user, cls, early_stop=None):
             calls.append(cls.__name__)
             return Triage(reasoning="Sports.", verdict="irrelevant")
 
@@ -137,7 +164,7 @@ def test_extract_full_path_and_versioning(tmp_path, monkeypatch):
     class FakeLLM:
         def __init__(self, cfg): pass
         def runtime_version(self): return "ollama test"
-        def structured(self, system, user, cls):
+        def structured(self, system, user, cls, early_stop=None):
             if cls is Triage:
                 return Triage(reasoning="Coyote and dog.", verdict="relevant")
             assert "HEADLINE ONLY" in user and "Publication date: 2026-10-02" in user
@@ -151,6 +178,7 @@ def test_extract_full_path_and_versioning(tmp_path, monkeypatch):
     r = rows[0]
     assert r["extraction_version"] == extract.EXTRACTION_VERSION and r["text_source"] == "headline"
     assert r["taxon_scientific"] == "Canis latrans" and r["taxon_check"] == "agree"
+    assert r["taxon_evidence_source"] == "animal name"
     assert r["llm_runtime"] == "ollama test"
     assert extract.main() == 0  # idempotent
 
@@ -158,7 +186,7 @@ def test_extract_full_path_and_versioning(tmp_path, monkeypatch):
 def test_prompts_contain_definitions():
     assert "relevance_reasoning" in extract.SYSTEM and "bear spray" in extract.SYSTEM
     assert "cougar" in extract.SYSTEM            # taxon vocabulary is shown to the model
-    assert "verdict" in extract.TRIAGE_SYSTEM
+    assert "verdict" in extract.TRIAGE_SYSTEM and "nutria = OTTER" in extract.TRIAGE_SYSTEM
 
 
 # --- geocoding ---------------------------------------------------------------
@@ -190,12 +218,14 @@ def test_build_dedups_same_event(tmp_path, monkeypatch):
     spec = [("r1", 40.00, -105.00, "2026-10-01", "coyote", True, "fulltext"),
             ("r2", 40.05, -105.08, "2026-10-02", "coyote", True, "snippet"),
             ("r3", 40.00, -105.00, "2026-10-01", "cougar", True, "fulltext"),
-            ("r4", None, None, None, "unknown", False, "headline")]
+            ("r4", None, None, None, "unknown", False, "headline"),
+            ("r5", 43.2, -4.8, "2026-10-01", "brown bear", True, "fulltext")]    # Spain: out of region
     for rid, lat, lon, d, tx, ev, src in spec:
         arts.append({"id": rid, "title": f"title {rid}", "url": f"https://example.org/{rid}",
                      "publisher": "X", "published": "2026-10-02T00:00:00+00:00"})
         exs.append({"id": rid, **_ex(event_date=d, taxon=tx, is_specific_event=ev,
-                                     real_wild_carnivore_involved=ev),
+                                     real_wild_carnivore_involved=ev,
+                                     country="other country" if rid == "r5" else "United States"),
                     **taxa.resolve(tx, None), "text_source": src, "lat": lat, "lon": lon,
                     "geocode_level": "place" if lat else "none", "geocode_match": None, "llm_model": "fake"})
     a, e = tmp_path / "a.jsonl", tmp_path / "e.jsonl"
@@ -206,8 +236,71 @@ def test_build_dedups_same_event(tmp_path, monkeypatch):
         monkeypatch.setattr(build_map_data, name, val)
     meta = build_map_data.main()
     fc = json.loads(gj.read_text())
-    assert meta["n_events"] == 2 and meta["n_articles_not_events"] == 1
+    assert meta["n_events"] == 2 and meta["n_articles_not_events"] == 2 and meta["n_out_of_region"] == 1
     merged = [f for f in fc["features"] if f["properties"]["n_reports"] == 2][0]["properties"]
     assert merged["text_source"] == "fulltext" and merged["taxon_scientific"] == "Canis latrans"
     assert fc["metadata"]["group_colors"]["Wild cats"].startswith("#")
     assert (tmp_path / "events.csv").exists()
+
+
+# --- speed: early stop ---------------------------------------------------------
+
+def test_early_stop_parsing():
+    nonevent = '{"relevance_reasoning": "General \\"wolf\\" policy story.", "real_wild_carnivore_involved": true, "is_specific_event": false'
+    r = extract.early_stop(nonevent)
+    assert r["is_specific_event"] is False and r["relevance_reasoning"] == 'General "wolf" policy story.'
+    head = '{"relevance_reasoning": "x", "real_wild_carnivore_involved": true, "is_specific_event": true, "country": "'
+    assert extract.early_stop(head + 'Can') is None                 # wait for the value
+    assert extract.early_stop(head + 'Canada", ') is None           # NA event: keep generating
+    assert extract.early_stop(head + 'other country", ')["country"] == "other country"
+
+
+def test_early_stop_row_is_written_and_excluded(tmp_path, monkeypatch):
+    from llm import EarlyStop
+    out = _patch_extract(monkeypatch, tmp_path, [{"id": "a1", "title": "Wolves return to Europe", "url": None,
+                                                  "gnews_url": "g"}])
+
+    class FakeLLM:
+        def __init__(self, cfg): pass
+        def runtime_version(self): return "t"
+        def structured(self, system, user, cls, early_stop=None):
+            if cls is Triage:
+                return Triage(reasoning="Wolves.", verdict="relevant")
+            return EarlyStop({"relevance_reasoning": "Policy.", "real_wild_carnivore_involved": True,
+                              "is_specific_event": False, "country": None}, "{...")
+
+    monkeypatch.setattr(extract, "LLMClient", FakeLLM)
+    monkeypatch.setattr(extract, "Geocoder", FakeGeo)
+    assert extract.main() == 1
+    row = json.loads(out.read_text())
+    assert row["early_stopped"] is True and row["is_specific_event"] is False
+
+
+def test_schema_decisions_come_first():
+    props = list(json_schema()["properties"])
+    assert props[:4] == ["relevance_reasoning", "real_wild_carnivore_involved", "is_specific_event", "country"]
+
+
+# --- GDELT ---------------------------------------------------------------------
+
+def test_gdelt_search_and_fallback(monkeypatch):
+    import common
+    import fetch_news
+    cfg = common.load_config()
+    cfg["search"]["editions"] = [{"country": "MX", "language": "es-419", "terms": "es"}]
+    calls = []
+
+    def fake_get(params, interval):
+        calls.append(params["query"])
+        if len(calls) == 1:
+            return None, "HTTP 200: Your search contained a phrase that was too short."
+        return [{"url": "https://example.mx/oso", "title": "Oso ataca a perro", "seendate": "20261126T101500Z",
+                 "domain": "example.mx", "language": "Spanish", "sourcecountry": "Mexico"}], None
+
+    monkeypatch.setattr(fetch_news, "_gdelt_get", fake_get)
+    per_query = fetch_news.search_gdelt(cfg)
+    assert "sourcecountry:MX" in calls[0] and "sourcelang:spanish" in calls[0]
+    assert "ataque" in calls[0] and "ataque" not in calls[1]          # fallback drops conflict terms
+    rec = per_query[0][0]
+    assert rec["url"] == "https://example.mx/oso" and rec["date_source"] == "gdelt_seendate"
+    assert rec["published"].startswith("2026-11-26T10:15")

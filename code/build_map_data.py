@@ -85,7 +85,8 @@ def main() -> dict:
     arts = {a["id"]: a for a in read_jsonl(ARTICLES)}
     ex = read_jsonl(EXTRACTIONS)
     rows = [{**arts.get(e["id"], {}), **e} for e in ex]
-    events = [r for r in rows if r.get("is_specific_event") and r.get("real_wild_carnivore_involved")]
+    events = [r for r in rows if r.get("is_specific_event") and r.get("real_wild_carnivore_involved")
+              and r.get("country") != "other country"]
     located = [r for r in events if r.get("lat") is not None]
 
     features = []
@@ -94,19 +95,21 @@ def main() -> dict:
         d = _date(rep)
         props = {k: rep.get(k) for k in (
             "animal_name", "taxon", "taxon_scientific", "taxon_rank", "taxon_group", "taxon_family",
-            "taxon_evidence", "taxon_check", "n_animals", "conflict_types", "primary_conflict_type",
+            "taxon_check", "taxon_llm", "taxon_evidence_source", "n_animals", "conflict_types", "primary_conflict_type",
             "human_activity", "human_outcome", "n_people_injured", "n_people_killed",
             "domestic_animal_type", "domestic_animal_outcome", "rabies_status", "animal_outcome",
-            "location_name", "admin1", "country", "location_precision", "geocode_level",
-            "geocode_match", "summary", "confidence", "notes", "event_date_precision",
+            "location_name", "admin1", "country", "geocode_level",
+            "geocode_match", "summary", "confidence", "event_date_precision",
             "multiple_events", "text_source", "llm_model")}
         props.update({
             "event_id": min(r["id"] for r in g),
             "date": d.isoformat() if d else None,
             "date_is_publication_date": not rep.get("event_date"),
+            "date_source": None if rep.get("event_date") else rep.get("date_source", "publication"),
             "n_reports": len(g),
             "sources": sorted(({"title": r.get("title"), "url": r.get("url") or r.get("gnews_url"),
-                                "publisher": r.get("publisher"), "published": r.get("published")}
+                                "publisher": r.get("publisher"), "published": r.get("published"),
+                                "source": r.get("source", "googlenews")}
                                for r in g), key=lambda s: s["published"] or ""),
         })
         features.append({"type": "Feature",
@@ -119,6 +122,7 @@ def main() -> dict:
         "n_articles": len(arts),
         "n_articles_processed": len(ex),
         "n_articles_not_events": len(rows) - len(events),
+        "n_out_of_region": sum(r.get("country") == "other country" for r in rows),
         "n_event_reports_not_geocoded": len(events) - len(located),
         "n_events": len(features),
         "dedup": cfg["dedup"],
@@ -131,7 +135,7 @@ def main() -> dict:
     # Flat table for analysis (one row per event, sources collapsed)
     cols = ["event_id", "date", "date_is_publication_date", "event_date_precision",
             "taxon", "taxon_scientific", "taxon_rank", "taxon_family", "taxon_group", "animal_name",
-            "taxon_evidence", "taxon_check", "n_animals", "primary_conflict_type", "conflict_types",
+            "taxon_check", "taxon_llm", "taxon_evidence_source", "n_animals", "primary_conflict_type", "conflict_types",
             "human_activity", "human_outcome", "n_people_injured", "n_people_killed",
             "domestic_animal_type", "domestic_animal_outcome", "rabies_status", "animal_outcome",
             "location_name", "admin1", "country", "lat", "lon", "geocode_level",

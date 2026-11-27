@@ -131,7 +131,7 @@
     const tags = (p.conflict_types || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("");
     const flags = [
       p.geocode_level !== "place" ? `<span class="tag warn">location approximate (${esc(p.geocode_level)})</span>` : "",
-      p.date_is_publication_date ? `<span class="tag warn">date = publication date</span>` : "",
+      p.date_is_publication_date ? `<span class="tag warn">date = ${p.date_source === "gdelt_seendate" ? "date first seen online" : "publication date"}</span>` : "",
       p.confidence === "low" ? `<span class="tag warn">low-confidence extraction</span>` : "",
       p.text_source && p.text_source !== "fulltext" ? `<span class="tag warn">extracted from ${p.text_source === "headline" ? "headline" : "headline/snippet"} only</span>` : "",
       p.multiple_events ? `<span class="tag warn">article reports multiple incidents</span>` : "",
@@ -146,7 +146,7 @@
       <div>${tags}${flags}</div>
       <p class="summary">${esc(p.summary)}</p>
       <dl>
-        ${row("Animal", `${esc(cap(p.taxon))}${p.taxon_scientific ? ` <i>${esc(p.taxon_scientific)}</i>` : ""}<br><small>${esc(p.taxon_family || p.taxon_group)} · named in text as “${esc(p.animal_name || "—")}” · ${esc(p.taxon_evidence)}</small>`)}
+        ${row("Animal", `${esc(cap(p.taxon))}${p.taxon_scientific ? ` <i>${esc(p.taxon_scientific)}</i>` : ""}<br><small>${esc(p.taxon_family || p.taxon_group)} · named in text as “${esc(p.animal_name || "—")}” · species from ${esc(p.taxon_evidence_source === "none" ? "model only" : p.taxon_evidence_source)}${p.taxon_llm && p.taxon_llm !== p.taxon ? ` · model proposed “${esc(p.taxon_llm)}”` : ""}</small>`)}
         ${row("Animals involved", esc(p.n_animals))}
         ${row("Primary type", esc(p.primary_conflict_type))}
         ${row("Human activity", esc(p.human_activity))}
@@ -156,7 +156,6 @@
         ${row("Animal outcome", esc(p.animal_outcome))}
         ${row("Geocoded to", esc(p.geocode_match))}
         ${row("Confidence", esc(p.confidence))}
-        ${row("Notes", esc(p.notes))}
       </dl>
       <h4>Sources (${p.n_reports})</h4>
       <ul class="src">${(p.sources || []).map((s) => `<li><a href="${esc(safeUrl(s.url))}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a><br><small>${esc(s.publisher || "")} · ${esc((s.published || "").slice(0, 10))}</small></li>`).join("")}</ul>

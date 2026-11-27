@@ -20,7 +20,7 @@ groups:
   - id: bears
     label: Bears
     family: Ursidae
-    generic_names: [bear, bears, bear cub, cub, oso, osos, osa]
+    generic_names: [bear, bears, bear cub, bear cubs, oso, osos, osa]
     color: "#D55E00"
     query_terms:
       en: [bear, bears, grizzly, grizzlies]

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import unicodedata
 
@@ -25,6 +26,26 @@ URL = "https://nominatim.openstreetmap.org/search"
 def _norm(s: str | None) -> str:
     s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode()
     return s.lower().strip()
+
+
+# Only relational prefixes. Cardinal words are NOT stripped: "North Vancouver",
+# "South Lake Tahoe" and "Northern Bruce Peninsula" are real place names.
+_PREFIX = re.compile(r"^(?:near|nearby|outside(?: of)?|the area of|area of|cerca de|en las afueras de"
+                     r"|afueras de|en)\s+",
+                     re.IGNORECASE)
+
+
+def clean_place(place: str | None) -> str | None:
+    """'near Goldstream Park' -> 'Goldstream Park'; 'condado de Guilford' -> 'Guilford County'."""
+    if not place:
+        return place
+    p = place.strip()
+    for _ in range(3):
+        p = _PREFIX.sub("", p).strip()
+    m = re.match(r"^condado de\s+(.+)$", p, re.IGNORECASE)
+    if m:
+        p = f"{m.group(1)} County"
+    return p or None
 
 
 class Geocoder:
@@ -76,7 +97,10 @@ class Geocoder:
 
     def geocode(self, place: str | None, admin1: str | None, country: str | None) -> dict:
         clean = lambda v: None if (v is None or _norm(v) in ("", "unknown", "null", "none", "n/a")) else v
-        place, admin1, country = clean(place), clean(admin1), clean(country)
+        place, admin1, country = clean_place(clean(place)), clean(admin1), clean(country)
+        if country == "other country":
+            return {"lat": None, "lon": None, "geocode_level": "none", "geocode_query": None,
+                    "geocode_match": None}
         cc = {"united states": "us", "canada": "ca", "mexico": "mx"}.get(_norm(country))
         out = lambda h, q, lvl: {"lat": h["lat"], "lon": h["lon"], "geocode_level": lvl,
                                  "geocode_query": q, "geocode_match": h["display_name"]}

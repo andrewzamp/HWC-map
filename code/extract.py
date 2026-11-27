@@ -15,14 +15,16 @@ resolution, geocoding.
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 import time
 from datetime import datetime, timezone
 
 from common import ARTICLES, CACHE, EXTRACTIONS, append_jsonl, load_config, norm_title, read_jsonl, write_jsonl
-from fetch_news import download_text, resolve_url
+from fetch_news import STATS as FT_STATS, download_text, resolve_url
 from geocode import Geocoder
-from llm import LLMClient
+from llm import EarlyStop, LLMClient
 import taxa
 from schema import EXTRACTION_VERSION, Extraction, Triage, field_guide
 
@@ -46,10 +48,42 @@ Wolverines, Badgers, Coyotes), "bear market", TV stations named FOX, human smugg
 {field_guide(Extraction)}"""
 
 TRIAGE_SYSTEM = f"""You screen news headlines for a database of human-wildlife conflict involving \
-wild carnivores in North America. Headlines may be English or Spanish. Be lenient: answer \
-'irrelevant' only when you are sure. Return JSON with these fields:
+wild carnivores. Headlines may be in English or Spanish. Your ONLY job is to tell whether the \
+animal word refers to the real animal. Do not judge whether a conflict happened.
+
+Spanish names: oso = bear, lobo = wolf, coyote = coyote, zorro/zorra = fox, puma/león de montaña = \
+cougar, jaguar, lince = lynx/bobcat, nutria = OTTER (not coypu), tejón = badger or coati, \
+mapache = raccoon, coatí = coati, cacomixtle = ringtail, zorrillo/mofeta = skunk, glotón = wolverine.
+
+Return JSON with these fields:
 
 {field_guide(Triage)}"""
+
+_RX_BOOL = {k: re.compile(rf'"{k}"\s*:\s*(true|false)') for k in ("real_wild_carnivore_involved", "is_specific_event")}
+_RX_COUNTRY = re.compile(r'"country"\s*:\s*"([^"]*)"')
+_RX_REASON = re.compile(r'"relevance_reasoning"\s*:\s*("(?:[^"\\]|\\.)*")')
+
+
+def early_stop(partial: str) -> dict | None:
+    """Stop generation once the model has decided the article is not a
+    North-American conflict event: the remaining ~25 fields would be discarded
+    by the build step anyway. Saves most of the generation time for non-events."""
+    ev = _RX_BOOL["is_specific_event"].search(partial)
+    if not ev:
+        return None
+    is_event = ev.group(1) == "true"
+    country = _RX_COUNTRY.search(partial)
+    if is_event and not country:
+        return None                      # wait for the country field
+    if is_event and country.group(1) != "other country":
+        return None                      # a real NA (or unknown-country) event: generate everything
+    rw = _RX_BOOL["real_wild_carnivore_involved"].search(partial)
+    rr = _RX_REASON.search(partial)
+    return {"relevance_reasoning": json.loads(rr.group(1)) if rr else None,
+            "real_wild_carnivore_involved": rw.group(1) == "true" if rw else None,
+            "is_specific_event": is_event,
+            "country": country.group(1) if country else None}
+
 
 NULL_GEO = {"lat": None, "lon": None, "geocode_level": "none", "geocode_query": None, "geocode_match": None}
 
@@ -100,6 +134,10 @@ def main() -> int:
     done = {r["id"] for r in current}
     articles = read_jsonl(ARTICLES)
     todo = [a for a in articles if a["id"] not in done]
+    cap = cfg["llm"].get("max_articles_per_run")
+    if cap and len(todo) > cap:
+        log.info("%d unprocessed articles; processing %d this run, the rest carry over", len(todo), cap)
+        todo = todo[:cap]
     log.info("%d articles to process with %s:%s", len(todo), cfg["llm"]["backend"], cfg["llm"]["model"])
     if not todo:
         return 0
@@ -140,25 +178,39 @@ def main() -> int:
             tr = triage.get(a["id"])
             base = {"id": a["id"], **stamp(), "triage_verdict": tr.verdict if tr else None,
                     "triage_reasoning": tr.reasoning if tr else None}
+            t0 = time.time()
             try:
                 text = get_text(a, cfg)
                 user, text_source = build_prompt(a, text, cfg["fulltext"]["max_chars"])
-                ex: Extraction = llm.structured(SYSTEM, user, Extraction)
+                t1 = time.time()
+                ex = llm.structured(SYSTEM, user, Extraction, early_stop=early_stop)
             except Exception as e:
                 log.error("[%d/%d] %s — extraction failed: %s", i, len(todo), a["id"], e)
                 continue  # not recorded → retried next run
-            tx = taxa.resolve(ex.taxon, ex.animal_name)
+            if isinstance(ex, EarlyStop):
+                append_jsonl(EXTRACTIONS, [{**base, "text_source": text_source, **ex.fields,
+                                            "early_stopped": True, **NULL_GEO}])
+                n_ok += 1
+                log.info("[%d/%d] %s | %s | early stop: event=%s country=%s | text %.0fs + llm %.0fs | %s",
+                         i, len(todo), a["id"], text_source, ex.fields["is_specific_event"], ex.fields["country"],
+                         t1 - t0, time.time() - t1, (a.get("title") or "")[:70])
+                continue
+            tx = taxa.resolve(ex.taxon, ex.animal_name, f"{a.get('title') or ''}\n{(text or '')[:cfg['fulltext']['max_chars']]}")
             g = geo.geocode(ex.location_name, ex.admin1, ex.country) if ex.is_specific_event else NULL_GEO
             append_jsonl(EXTRACTIONS, [{**base, "text_source": text_source, **ex.model_dump(), **tx, **g}])
             n_ok += 1
-            log.info("[%d/%d] %s | %s | event=%s | %s (%s, %s) | %s, %s | geo=%s | %s", i, len(todo), a["id"],
-                     text_source, ex.is_specific_event, tx["taxon"], ex.animal_name, tx["taxon_check"],
-                     ex.location_name, ex.admin1, g["geocode_level"], (a.get("title") or "")[:70])
+            log.info("[%d/%d] %s | %s | event=%s | %s (%s, %s) | %s, %s | geo=%s | text %.0fs + llm %.0fs | %s",
+                     i, len(todo), a["id"], text_source, ex.is_specific_event, tx["taxon"], ex.animal_name,
+                     tx["taxon_check"], ex.location_name, ex.admin1, g["geocode_level"], t1 - t0, time.time() - t1,
+                     (a.get("title") or "")[:70])
             geo.save()
     finally:
         write_jsonl(ARTICLES, articles)  # persist resolved URLs / has_fulltext
     n_ft = sum(a.get("has_fulltext", False) for a in todo)
     log.info("processed %d articles; full text retrieved for %d/%d extracted", n_ok, n_ft, len(todo))
+    log.info("FULL-TEXT DIAGNOSTICS: %s", {k: v for k, v in FT_STATS.items() if k != "first_errors"})
+    for err in FT_STATS["first_errors"]:
+        log.info("FULL-TEXT FIRST ERRORS: %s", err)
     return n_ok
 
 

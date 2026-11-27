@@ -12,7 +12,9 @@ Design choices
 * The model never produces coordinates or scientific names: place names are
   geocoded deterministically; scientific names come from the registry.
 * Fields are generated in schema order under constrained decoding, so a short
-  reasoning field comes first and conditions the relevance decisions.
+  reasoning field comes first and conditions the relevance decisions; the
+  decisions (event? country?) come next so extraction can stop early for
+  non-events and out-of-region stories (see extract.early_stop).
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ from pydantic import BaseModel, Field
 
 import taxa
 
-EXTRACTION_VERSION = 3   # bump when schema/prompt change → old rows are re-extracted
+EXTRACTION_VERSION = 5   # bump when schema/prompt change → old rows are re-extracted
 
 Taxon = Literal[tuple(taxa.taxon_labels())]
 
@@ -54,14 +56,24 @@ CONFLICT_DEFINITIONS = (
 
 
 class Triage(BaseModel):
-    """Cheap headline-only screen, run before full-text download/extraction."""
-    reasoning: str = Field(description="One sentence on whether the headline is about a real wild carnivore "
-                           "(bear, wolf, coyote, fox, cougar, bobcat, lynx, jaguar, raccoon, skunk, badger, "
-                           "otter, wolverine, coati...) interacting with people, pets, livestock or property.")
+    """Cheap headline-only screen, run before full-text download/extraction.
+
+    Deliberately narrow: it only resolves WORD SENSE (is the animal meant at
+    all?). Whether an actual conflict event happened is decided by the full
+    extraction, which sees the article text. A triage false negative is
+    invisible downstream, so the bar for 'irrelevant' is high.
+    """
+    reasoning: str = Field(description="One sentence: does the animal word in the headline refer to the real "
+                           "animal, or to something else (sports team, brand, car, TV station, person, smugglers, "
+                           "figurative use)? If no animal is named but one could be involved (e.g. a rabies alert, "
+                           "an unexplained attack), say so.")
     verdict: Literal["relevant", "unsure", "irrelevant"] = Field(
-        description="'irrelevant' ONLY when clearly not about a real wild carnivore animal (sports teams, "
-        "'bear spray' used on people, 'bear market', Fox News, human smugglers called 'coyotes', cars, "
-        "brands, mascots, people's names) or clearly not about an interaction with humans. If in doubt: 'unsure'.")
+        description="'relevant' = a real wild carnivore is (or is very likely) part of the story, whatever happened "
+        "to it (attacks, sightings, vehicle collisions, rabies, livestock losses, management, killings). "
+        "'unsure' = an animal may be involved. 'irrelevant' ONLY when the word clearly does not mean the animal "
+        "(sports teams like Bears/Lions/Pumas/Otters/Jaguars, 'bear market', 'bear spray' used on people, FOX TV, "
+        "Jaguar cars, human smugglers called 'coyotes', people or places named Wolf/Fox/Lobos) or the story has "
+        "nothing to do with animals.")
 
 
 class Extraction(BaseModel):
@@ -80,6 +92,10 @@ class Extraction(BaseModel):
         "animal at an identifiable time and place. False for general advice, policy or management debates, "
         "research, opinion, hunting/trapping-season news, or listicles without a specific incident."
     )
+    country: Literal["United States", "Canada", "Mexico", "other country", "unknown"] = Field(
+        description="Country where the incident happened. 'other country' if outside the USA, Canada and Mexico "
+        "(e.g. Spain, Argentina, the Netherlands) — such stories are out of scope."
+    )
     multiple_events: bool = Field(
         description="True if the article reports several distinct incidents (e.g. a seasonal round-up). "
         "Fields below then describe the main/most recent one."
@@ -93,10 +109,6 @@ class Extraction(BaseModel):
         "or it is unambiguous (e.g. 'mountain lion'/'puma'/'Florida panther' = cougar; 'grizzly' = brown bear). "
         "If only the group is known (e.g. just 'fox', 'bear', 'skunk'), choose the matching 'unidentified ...' "
         "label. Use 'other wild carnivore' for wild carnivores not listed, 'unknown' otherwise."
-    )
-    taxon_evidence: Literal["explicitly stated", "inferred from context", "unknown"] = Field(
-        description="'explicitly stated' if the article names the species; 'inferred from context' if deduced; "
-        "otherwise 'unknown'."
     )
     n_animals: Optional[int] = Field(description="Number of wild animals involved (e.g. sow with 2 cubs = 3). null if unknown.")
     event_date: Optional[str] = Field(
@@ -146,15 +158,10 @@ class Extraction(BaseModel):
         description="US state, Canadian province/territory or Mexican state, full name (e.g. 'British Columbia', "
         "not 'B.C.'; 'Nuevo León'). Fill it if the place clearly implies it. null if unknown."
     )
-    country: Literal["United States", "Canada", "Mexico", "unknown"]
-    location_precision: Literal[
-        "exact site", "locality", "protected area", "county or district", "state or province", "unknown"
-    ] = Field(description="Spatial precision of the location described in the article.")
-    summary: str = Field(description="Neutral 1-3 sentence summary of the incident, in English.")
+    summary: str = Field(description="Neutral 1-2 sentence summary of the incident, in English.")
     confidence: Literal["high", "medium", "low"] = Field(
         description="Your confidence that the fields above are correct given the text available."
     )
-    notes: Optional[str] = Field(description="Ambiguities or caveats worth flagging. null if none.")
 
 
 def json_schema(model: type[BaseModel] = Extraction) -> dict:

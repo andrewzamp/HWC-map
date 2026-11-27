@@ -6,7 +6,7 @@ Scope: **wild terrestrial Carnivora in the USA, Canada and Mexico** (English and
 **🗺️ Live map: <https://andrewzamp.github.io/HWC-map/>**
 
 ```
-Google News (gnews) ──► article metadata + full text ──► open-weight LLM (Ollama, JSON-schema constrained)
+GDELT DOC API ──────► article metadata + full text ──► open-weight LLM (Ollama, JSON-schema constrained)
         │                                                     │
         ▼                                                     ▼
  data/articles.jsonl                               data/extractions.jsonl ◄── Nominatim geocoding
@@ -22,8 +22,8 @@ Google News (gnews) ──► article metadata + full text ──► open-weight
 
 | Step | Script | What it does |
 |---|---|---|
-| fetch | `code/fetch_news.py` | Runs one Google News query per **taxon group × edition** (US-en, CA-en, MX-es), built from `taxa.yaml` and `config.yaml`. Results are sampled round-robin across queries, and already-seen URLs and syndicated duplicate headlines are dropped. Stores metadata only. |
-| extract | `code/extract.py` | **Pass 1, triage**: a cheap headline-only LLM call skips clearly irrelevant hits (sports teams, Fox News, "bear spray" assaults, smugglers called "coyotes"…). Only *irrelevant* is skipped, *unsure* goes through, and every verdict is stored. **Pass 2, extraction**: downloads the article body (retried on later runs if it fails), then sends headline + date + body to an open-weight LLM with a definition of every field. Output is constrained to the JSON schema in `code/schema.py` and validated with pydantic. Taxon resolution and Nominatim geocoding follow. Incremental: each article is processed once per extraction version. |
+| fetch | `code/fetch_news.py` | Runs one query per **taxon group × edition** (outlets in the US/English, Canada/English and Mexico/Spanish) against the **GDELT DOC 2.0 API**, built from `taxa.yaml` and `config.yaml`. GDELT returns direct article URLs. Results are sampled round-robin across queries, and already-seen URLs and syndicated duplicate headlines are dropped. Stores metadata only. Google News (`source: googlenews`) remains available, but its links can no longer be decoded, so those articles are headline-only. |
+| extract | `code/extract.py` | **Pass 1, triage**: a cheap headline-only LLM call skips clearly irrelevant hits (sports teams, Fox News, "bear spray" assaults, smugglers called "coyotes"…). Only *irrelevant* is skipped, *unsure* goes through, and every verdict is stored. **Pass 2, extraction**: downloads the article body (retried on later runs if it fails), then sends headline + date + the first ~3,500 characters to an open-weight LLM with a definition of every field. Output is streamed. The relevance decisions come first in the schema, and generation is stopped as soon as the model says the article is not a specific event or is outside North America, since the remaining fields would be discarded anyway. Output is constrained to the JSON schema in `code/schema.py` and validated with pydantic. Taxon resolution and Nominatim geocoding follow. Incremental: each article is processed once per extraction version. |
 | build | `code/build_map_data.py` | Keeps specific events, merges reports of the same incident, writes GeoJSON for the map and a flat CSV for analysis. |
 
 Run everything: `python code/pipeline.py` (or a single step: `python code/pipeline.py fetch|extract|build`).
@@ -75,13 +75,16 @@ Tests (offline, no LLM): `pytest -q`
 2. **Settings → Pages** → *Deploy from a branch* → `main` / `/docs`.
 3. **Actions → Update HWC map → Run workflow** for the first run. After that it runs daily (05:17 UTC).
 
+Each run processes at most `max_articles_per_run` articles (config); any backlog carries over to the next run. On a **private** repo, Actions minutes count against your plan's monthly quota; public repos run free.
+
 Ollama is downloaded only when its version changes (binary and model are both cached). Set `OLLAMA_VERSION` in the workflow to pin it; the version used is recorded in every extracted row.
 
 The map is then served at `https://andrewzamp.github.io/HWC-map/`.
 
 ## Known limitations / next steps
 - Query terms differ in how much noise they pull in ("fox", "jaguar", "coyote", "panther" are heavily polysemous), so **recall and precision differ by taxon and language**. Compare taxa only after measuring this.
-- Google News returns ≤ 100 items per query and its ranking is opaque, so the sample is **not** a census. Reporting effort varies by region and outlet, and the map shows *reported* conflicts. Any spatial or temporal analysis must account for this (e.g. by modelling media effort).
+- **Dates**: GDELT gives the time it first *saw* an article, not its publication time. It's used only when the text gives no event date, and it's flagged (`date_source`).
+- GDELT and Google News return ≤ 250 / ≤ 100 items per query, and their coverage of local outlets is uneven, so the sample is **not** a census. Reporting effort varies by region and outlet, and the map shows *reported* conflicts. Any spatial or temporal analysis must account for this (e.g. by modelling media effort).
 - Paywalled or JS-rendered pages fall back to snippet-only extraction (flagged in the data).
 - A 7B model makes mistakes. Before scaling, hand-annotate a validation sample (~100–200 articles) and measure per-field accuracy. Precision/recall of `is_specific_event` is the priority.
 - Nominatim's free API allows ≤ 1 request/s and suits this volume. At larger scale, self-host it or switch to GeoNames.

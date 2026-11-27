@@ -1,11 +1,18 @@
 """Taxon registry (taxa.yaml): vocabulary, queries and name resolution.
 
-Species identity is resolved twice, independently:
+Species identity is resolved from two independent sources:
   1. the LLM picks a standardised label from the closed registry vocabulary;
-  2. the animal name *as written* in the article is matched against the
-     registry synonyms (deterministic, accent/case-insensitive).
-Agreement → high trust. Disagreement is kept and flagged (`taxon_check`),
-never silently overwritten, so it can be audited or used as a QC filter.
+  2. TEXT EVIDENCE: the animal name as written by the article (returned by the
+     LLM) and, failing that, a scan of headline + text for registry names —
+     both matched deterministically against registry synonyms.
+
+Rule: text evidence wins whenever it exists; the LLM label is used only when
+the text gives no usable name (e.g. "the animal", out-of-registry species).
+Rationale: a 7B model can mislabel even an explicit headline ("4 grizzly bears"
+→ gray wolf), while a dictionary match is reproducible and auditable. Generic
+names ("skunk") stay at group level even if the LLM proposes a species.
+The LLM's own label is always kept (`taxon_llm`) and the relation between the
+two sources is recorded in `taxon_check` for QC.
 """
 from __future__ import annotations
 
@@ -103,31 +110,71 @@ def _lookup(cand: str, syn: dict) -> str | None:
     return None
 
 
-def resolve(llm_label: str, name_as_written: str | None) -> dict:
-    """Combine LLM label and dictionary match into final taxon fields."""
+@lru_cache
+def _scan_regex() -> tuple[re.Pattern, dict]:
+    syn = index()["synonyms"]
+    forms = {}
+    for k, label in syn.items():
+        for f in (k, k + "s", k + "es"):
+            forms.setdefault(f, label)
+    alts = sorted(forms, key=len, reverse=True)     # longest match first ("black bear" before "bear")
+    return re.compile(r"\b(" + "|".join(map(re.escape, alts)) + r")\b"), forms
+
+
+def scan_text(text: str | None) -> list[str]:
+    """Registry labels named anywhere in a text, in order of appearance."""
+    if not text:
+        return []
+    rx, forms = _scan_regex()
+    return [forms[m.group(1)] for m in rx.finditer(_norm(text))]
+
+
+def _evidence(name_as_written: str | None, text: str | None) -> tuple[str | None, str]:
+    """Best text-grounded taxon label and where it came from."""
     by_label = index()["by_label"]
-    dict_label = match_name(name_as_written)
+    found = scan_text(text)
+    species_found = {l for l in found if by_label[l]["rank"] == "species"}
+    name_label = match_name(name_as_written)
+    if name_label:
+        rec = by_label[name_label]
+        if rec["rank"] != "species":
+            # generic name ("bear"); the text may still name the species once ("black bear")
+            same_group = {l for l in species_found if by_label[l]["group"] == rec["group"]}
+            if len(same_group) == 1:
+                return same_group.pop(), "text scan"
+        return name_label, "animal name"
+    if len(species_found) == 1:
+        return species_found.pop(), "text scan"
+    groups = {by_label[l]["group"] for l in found}
+    if not species_found and len(groups) == 1:
+        return next(l for l in found), "text scan"      # only a generic name, one group
+    return None, "none"
+
+
+def resolve(llm_label: str, name_as_written: str | None, text: str | None = None) -> dict:
+    """Final taxon fields: text evidence first, LLM label as fallback."""
+    by_label = index()["by_label"]
+    ev, source = _evidence(name_as_written, text)
     llm = by_label.get(llm_label, by_label[UNKNOWN])
-    if dict_label is None:
-        check, final = "no dictionary match", llm_label
-    elif dict_label == llm_label:
-        check, final = "agree", llm_label
+    if ev is None:
+        check, final = "llm only (no text evidence)", llm_label
+    elif ev == llm_label:
+        check, final = "agree", ev
     else:
-        dic = by_label[dict_label]
-        same_group = dic["group"] == llm["group"]
-        if same_group and dic["rank"] == "species" and llm["rank"] != "species":
-            # LLM: "unidentified wolves, coyotes & foxes"; name: "coyote" → name is more specific
-            check, final = "dictionary more specific", dict_label
-        elif same_group and llm["rank"] == "species" and dic["rank"] != "species":
-            # name is generic ("fox"); LLM picked a species from context ("gray fox")
-            check, final = "llm more specific", llm_label
+        e = by_label[ev]
+        same_group = e["group"] == llm["group"]
+        if same_group and e["rank"] == "species" and llm["rank"] != "species":
+            check = "text more specific"
+        elif same_group and e["rank"] != "species" and llm["rank"] == "species":
+            check = "llm more specific (not supported by text)"
         else:
-            # genuine conflict: keep the model's reading of the full context, but flag it
-            check, final = "disagree", llm_label
+            check = "disagree"
+        final = ev
     rec = by_label.get(final, by_label[UNKNOWN])
     return {"taxon": final, "taxon_scientific": rec["scientific"], "taxon_rank": rec["rank"],
             "taxon_group": rec["group"], "taxon_family": rec["family"],
-            "taxon_dictionary_match": dict_label, "taxon_check": check}
+            "taxon_llm": llm_label, "taxon_evidence_label": ev, "taxon_evidence_source": source,
+            "taxon_check": check}
 
 
 def group_colors() -> dict:

@@ -2,9 +2,14 @@
 # Taxa (species, search terms, colours) live in taxa.yaml.
 
 search:
+  # source: "gdelt" (GDELT DOC 2.0 API: direct article URLs, outlet-country and
+  # language filters) or "googlenews" (gnews; article URLs currently cannot be
+  # decoded, so extraction is headline-only).
+  source: gdelt
   # One query per (taxon group × edition):
   #   (<group query_terms>) (<conflict_terms>) -"<exclude_terms>"
   # The LLM triage + extraction steps do the real relevance filtering.
+  # GDELT: country = country of the OUTLET (FIPS code), language = article language.
   editions:
     - {country: US, language: en}
     - {country: CA, language: en}
@@ -14,14 +19,15 @@ search:
          livestock, cattle, sheep, goats, chickens, pet, dog, cat, "broke into", encounter, conflict]
     es: [ataque, atacó, ataca, mordió, mordida, rabia, mató, matan, ganado, borregos, gallinas,
          mascota, perro, avistamiento, conflicto]
-  period: 30d                 # look-back window passed to Google News
-  max_results_per_query: 20   # per (group × edition) query; Google caps at 100
-  max_new_articles: 20        # new articles accepted per run (sampled round-robin across queries)
+  period: 7d                  # look-back window (GDELT keeps a rolling ~3 months; e.g. 30d to backfill)
+  max_results_per_query: 50   # per (group × edition) query; GDELT max 250, Google max 100
+  max_new_articles: 40        # new articles accepted per run (sampled round-robin across queries)
   exclude_websites: []
+  gdelt_interval_s: 6         # GDELT asks for at most one request every 5 s
 
 fulltext:
   enabled: true
-  max_chars: 6000             # text passed to the LLM (≈1.5k tokens)
+  max_chars: 3500             # text passed to the LLM (≈900 tokens; news leads carry the facts)
   request_interval_s: 1
 
 triage:
@@ -39,7 +45,11 @@ llm:
   base_url: http://localhost:11434
   temperature: 0
   num_ctx: 8192
+  num_predict: 700            # hard cap on output tokens per call
   max_retries: 2
+  # Articles processed per run (triage + extraction); the rest wait for the
+  # next run. Keeps a run well inside the Actions time limit.
+  max_articles_per_run: 40
 
 geocoding:
   provider: nominatim

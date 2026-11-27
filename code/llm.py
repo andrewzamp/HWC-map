@@ -18,6 +18,12 @@ from pydantic import BaseModel, ValidationError
 log = logging.getLogger("llm")
 
 
+class EarlyStop:
+    """Generation deliberately stopped early; `fields` holds what was parsed."""
+    def __init__(self, fields: dict, raw: str):
+        self.fields, self.raw = fields, raw
+
+
 class LLMClient:
     def __init__(self, cfg: dict):
         self.backend = cfg["backend"]
@@ -26,30 +32,49 @@ class LLMClient:
         self.api_key = cfg.get("api_key")
         self.temperature = cfg.get("temperature", 0)
         self.num_ctx = cfg.get("num_ctx", 8192)
+        self.num_predict = cfg.get("num_predict", 700)
         self.max_retries = cfg.get("max_retries", 2)
 
     # -- backends ---------------------------------------------------------
-    def _ollama(self, messages: list[dict], schema: dict) -> str:
-        r = requests.post(
+    def _ollama(self, messages: list[dict], schema: dict, early_stop=None):
+        """Streamed call. If `early_stop(partial_text)` returns a dict, the
+        connection is closed (Ollama then stops generating) and that dict is
+        returned as an EarlyStop instead of the full JSON text."""
+        with requests.post(
             f"{self.base_url}/api/chat",
             json={
                 "model": self.model,
                 "messages": messages,
                 "format": schema,
-                "stream": False,
-                "options": {"temperature": self.temperature, "num_ctx": self.num_ctx, "seed": 42},
+                "stream": True,
+                "options": {"temperature": self.temperature, "num_ctx": self.num_ctx,
+                            "num_predict": self.num_predict, "seed": 42},
             },
+            stream=True,
             timeout=600,
-        )
-        r.raise_for_status()
-        return r.json()["message"]["content"]
+        ) as r:
+            r.raise_for_status()
+            parts: list[str] = []
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                chunk = json.loads(line)
+                parts.append(chunk.get("message", {}).get("content", ""))
+                if early_stop is not None:
+                    hit = early_stop("".join(parts))
+                    if hit is not None:
+                        return EarlyStop(hit, "".join(parts))
+                if chunk.get("done"):
+                    break
+        return "".join(parts)
 
-    def _openai(self, messages: list[dict], schema: dict) -> str:
+    def _openai(self, messages: list[dict], schema: dict, early_stop=None) -> str:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         body = {
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
+            "max_tokens": self.num_predict,
             "response_format": {"type": "json_schema",
                                 "json_schema": {"name": "extraction", "schema": schema}},
         }
@@ -70,13 +95,16 @@ class LLMClient:
         except Exception:
             return None
 
-    def structured(self, system: str, user: str, model_cls: type[BaseModel]) -> BaseModel:
+    def structured(self, system: str, user: str, model_cls: type[BaseModel], early_stop=None):
+        """Validated `model_cls` instance, or an EarlyStop (see _ollama)."""
         schema = model_cls.model_json_schema()
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         call = self._ollama if self.backend == "ollama" else self._openai
         last_err: Exception | None = None
         for attempt in range(self.max_retries + 1):
-            raw = call(messages, schema)
+            raw = call(messages, schema, early_stop)
+            if isinstance(raw, EarlyStop):
+                return raw
             try:
                 return model_cls.model_validate(json.loads(raw))
             except (json.JSONDecodeError, ValidationError) as e:
