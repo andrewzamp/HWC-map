@@ -3,6 +3,8 @@
 A near-real-time map of **human–wildlife conflict (HWC)** events mined from online news.
 Prototype scope: **bears (*Ursus americanus*, *U. arctos*, *U. maritimus*) in the USA and Canada**.
 
+**🗺️ Live map: <https://andrewzamp.github.io/HWC-map/>**
+
 ```
 Google News (gnews) ──► article metadata + full text ──► open-weight LLM (Ollama, JSON-schema constrained)
         │                                                     │
