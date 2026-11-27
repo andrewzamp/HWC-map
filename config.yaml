@@ -14,16 +14,29 @@ search:
     - {country: US, language: en}
     - {country: CA, language: en}
     - {country: MX, language: es-419, terms: es}
+  # Conflict terms. GDELT queries are length-limited, so GDELT uses only the
+  # first `gdelt_conflict_terms_n` of each list, THE SAME SET FOR EVERY TAXON
+  # (a taxon-dependent filter would bias between-taxa comparisons); animal
+  # terms are split across several queries instead. Google News uses all.
   conflict_terms:
-    en: [attack, attacked, attacks, mauled, bitten, bit, rabid, rabies, killed, euthanized,
-         livestock, cattle, sheep, goats, chickens, pet, dog, cat, "broke into", encounter, conflict]
-    es: [ataque, atacó, ataca, mordió, mordida, rabia, mató, matan, ganado, borregos, gallinas,
+    en: [attack, attacked, mauled, bitten, rabid, killed, livestock, chickens, euthanized, encounter,
+         attacks, bit, rabies, cattle, sheep, goats, pet, dog, cat, "broke into", conflict]
+    es: [ataque, atacó, mordió, rabia, mató, ganado, gallinas, mordida, ataca, matan, borregos,
          mascota, perro, avistamiento, conflicto]
   period: 7d                  # look-back window (GDELT keeps a rolling ~3 months; e.g. 30d to backfill)
   max_results_per_query: 50   # per (group × edition) query; GDELT max 250, Google max 100
   max_new_articles: 40        # new articles accepted per run (sampled round-robin across queries)
   exclude_websites: []
-  gdelt_interval_s: 6         # GDELT asks for at most one request every 5 s
+  # GDELT limits: query length (a 172-char query passed, 308 failed with "too
+  # short or too long") and ~1 request / 5 s per IP. GitHub runners share IPs,
+  # so expect 429s: back off progressively and stop at a time budget. The
+  # starting query rotates daily, and the 7-day window overlaps, so a query
+  # skipped one day is covered on the next.
+  gdelt_max_query_chars: 230  # a query rejected as too long is split in half and retried
+  gdelt_conflict_terms_n: 8
+  gdelt_interval_s: 8
+  gdelt_backoff_s: [20, 45, 90]
+  gdelt_time_budget_s: 900
 
 fulltext:
   enabled: true

@@ -15,6 +15,7 @@ used transiently by the LLM step, to avoid redistributing copyrighted text.
 from __future__ import annotations
 
 import logging
+import random
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -73,13 +74,14 @@ def search_googlenews(cfg: dict) -> list[list[dict]]:
 
 
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
-GDELT_LANG = {"en": "english", "es": "spanish", "fr": "french"}
 
 
-def _gdelt_get(params: dict, interval: float) -> tuple[list[dict] | None, str | None]:
-    """One rate-limited GDELT call → (articles, error_text)."""
-    for attempt in range(2):
-        time.sleep(interval)
+def _gdelt_get(params: dict, interval: float, backoff: list[float]) -> tuple[list[dict] | None, str | None]:
+    """Rate-limited GDELT call with progressive back-off on HTTP 429.
+    Returns (articles, None) or (None, error_text)."""
+    err = None
+    for attempt, wait in enumerate([interval, *backoff]):
+        time.sleep(wait + random.uniform(0, 2))      # jitter: runners share IPs with other GDELT users
         try:
             r = requests.get(GDELT_URL, params=params, timeout=60,
                              headers={"User-Agent": "HWC-map (+https://github.com/andrewzamp/HWC-map)"})
@@ -88,15 +90,14 @@ def _gdelt_get(params: dict, interval: float) -> tuple[list[dict] | None, str | 
             continue
         if r.status_code == 429:
             err = "HTTP 429 rate limited"
-            time.sleep(interval * 2)
             continue
         try:
-            return (r.json() or {}).get("articles", []), None   # empty result → {} or ""
+            return (r.json() or {}).get("articles", []), None     # no results → {} or ""
         except ValueError:
             body = r.text.strip()
             if not body:
                 return [], None
-            return None, f"HTTP {r.status_code}: {body[:300]}"   # GDELT explains query errors in plain text
+            return None, f"HTTP {r.status_code}: {body[:300]}"     # GDELT explains query errors in plain text
     return None, err
 
 
@@ -109,32 +110,46 @@ def _gdelt_date(seen: str | None) -> str | None:
 
 def search_gdelt(cfg: dict) -> list[list[dict]]:
     s = cfg["search"]
-    per_query = []
-    for q in taxa.queries(s):
-        lang = GDELT_LANG.get(q["language"][:2], q["language"])
-        filters = f" sourcecountry:{q['country']} sourcelang:{lang}"
-        params = {"query": q["query"] + filters, "mode": "ArtList", "format": "json",
-                  "maxrecords": s["max_results_per_query"], "timespan": s["period"], "sort": "DateDesc"}
-        arts, err = _gdelt_get(params, s.get("gdelt_interval_s", 6))
+    units = taxa.gdelt_units(s)
+    # rotate the starting unit daily so that, under rate limits/time budget,
+    # every unit gets queried first on some day
+    k = datetime.now(timezone.utc).timetuple().tm_yday % max(len(units), 1)
+    queue = units[k:] + units[:k]
+    budget = time.time() + s.get("gdelt_time_budget_s", 900)
+    interval, backoff = s.get("gdelt_interval_s", 8), s.get("gdelt_backoff_s", [20, 45, 90])
+    per_query, n_ok, n_fail, n_rl, n_skip = [], 0, 0, 0, 0
+    while queue:
+        if time.time() > budget:
+            n_skip = len(queue)
+            log.warning("GDELT time budget reached; %d queries skipped this run (covered by later runs)", n_skip)
+            break
+        u = queue.pop(0)
+        q = taxa.gdelt_query(u)
+        params = {"query": q, "mode": "ArtList", "format": "json", "maxrecords": s["max_results_per_query"],
+                  "timespan": s["period"], "sort": "DateDesc"}
+        arts, err = _gdelt_get(params, interval, backoff)
+        if arts is None and err and "too short or too long" in err and len(u["terms"]) > 1:
+            h = len(u["terms"]) // 2                       # unknown length limit: split and retry
+            log.warning("GDELT: query too long (%d chars), splitting: %s", len(q), q)
+            queue[:0] = [{**u, "terms": u["terms"][:h]}, {**u, "terms": u["terms"][h:]}]
+            continue
         if arts is None:
-            log.warning("GDELT rejected query (%s %s %s): %s | query: %s", q["group"], q["country"], lang, err,
-                        params["query"])
-            # Fallback: taxon terms + filters only (no conflict terms / exclusions); triage filters the noise
-            params["query"] = q["query"].split(") (")[0] + ")" + filters
-            arts, err = _gdelt_get(params, s.get("gdelt_interval_s", 6))
-            if arts is None:
-                log.warning("GDELT fallback query also failed: %s", err)
-                arts = []
-            else:
-                log.info("GDELT fallback (taxon terms only) succeeded")
-        log.info("GDELT %s/%s, group %-10s: %d hits", q["country"], lang, q["group"], len(arts))
+            n_fail += 1
+            n_rl += "429" in (err or "")
+            log.warning("GDELT query failed (%s %s): %s | %s", u["group"], u["country"], err, q)
+            continue
+        n_ok += 1
+        log.info("GDELT %s/%s %-10s %-45s: %d hits", u["country"], u["language"], u["group"],
+                 " OR ".join(u["terms"])[:45], len(arts))
         per_query.append([{
             "key": a["url"], "title": a.get("title"), "snippet": None, "gnews_url": None, "url": a["url"],
             "publisher": a.get("domain"), "publisher_href": f"https://{a['domain']}" if a.get("domain") else None,
             "published": _gdelt_date(a.get("seendate")), "date_source": "gdelt_seendate",
-            "edition": q["country"], "language": q["language"], "query_group": q["group"],
-            "gdelt_sourcecountry": a.get("sourcecountry"), "gdelt_language": a.get("language"),
-            "source": "gdelt"} for a in arts if a.get("url")])
+            "edition": u["country"], "language": u["language"], "query_group": u["group"],
+            "query_terms": u["terms"], "gdelt_sourcecountry": a.get("sourcecountry"),
+            "gdelt_language": a.get("language"), "source": "gdelt"} for a in arts if a.get("url")])
+    log.info("GDELT SUMMARY: %d queries succeeded, %d failed after retries (%d of them rate-limited), "
+             "%d skipped (time budget)", n_ok, n_fail, n_rl, n_skip)
     return per_query
 
 

@@ -28,6 +28,13 @@ GDELT DOC API ──────► article metadata + full text ──► open-
 
 Run everything: `python code/pipeline.py` (or a single step: `python code/pipeline.py fetch|extract|build`).
 
+### GDELT query design
+GDELT limits query length (≈200–300 characters) and request rate (≈1 per 5 s per IP; GitHub runners share IPs). So:
+- **The same conflict-term filter is used for every taxon** in a language (the first `gdelt_conflict_terms_n` terms in `config.yaml`). A filter that varied by taxon would bias between-taxa comparisons.
+- Animal terms are split across several queries rather than dropped. A query GDELT rejects as too long is halved automatically.
+- Each query carries only the exclusions that share a word with its animal terms.
+- Rate limits are handled with progressive back-off and a time budget. The starting query rotates daily, and the 7-day window overlaps between runs, so a query skipped one day is covered the next. The `GDELT SUMMARY` log line reports successes, failures and skips.
+
 ### Taxa (`taxa.yaml`)
 The registry is the single source of truth for each taxon group's search terms (EN/ES), excluded terms (`-"Chicago Bears"`, `-"Fox News"`…), the closed species vocabulary the model must choose from, name synonyms and map colours. Adding a species or group there updates queries, the schema and the map; then bump `EXTRACTION_VERSION`. Nomenclature follows the Mammal Diversity Database.
 

@@ -283,24 +283,45 @@ def test_schema_decisions_come_first():
 
 # --- GDELT ---------------------------------------------------------------------
 
-def test_gdelt_search_and_fallback(monkeypatch):
+def test_gdelt_units_same_conflict_filter_and_length():
+    import common
+    s = common.load_config()["search"]
+    units = taxa.gdelt_units(s)
+    for lang in {u["language"] for u in units}:
+        assert len({tuple(u["conflict"]) for u in units if u["language"] == lang}) == 1   # identical across taxa
+    assert all(len(taxa.gdelt_query(u)) <= s["gdelt_max_query_chars"] for u in units)
+    # every animal term of every group is queried somewhere
+    for ed in s["editions"]:
+        lang = ed.get("terms", ed["language"][:2])
+        for g in taxa.registry()["groups"]:
+            got = [t for u in units if u["group"] == g["id"] and u["country"] == ed["country"] for t in u["terms"]]
+            assert got == g["query_terms"].get(lang, [])
+    # exclusions travel only with related terms
+    fox = next(u for u in units if u["country"] == "US" and '"gray fox"' in taxa.gdelt_query(u))
+    assert '-"Fox News"' in taxa.gdelt_query(fox) and "Timberwolves" not in taxa.gdelt_query(fox)
+
+
+def test_gdelt_split_on_too_long_and_parse(monkeypatch):
     import common
     import fetch_news
     cfg = common.load_config()
     cfg["search"]["editions"] = [{"country": "MX", "language": "es-419", "terms": "es"}]
     calls = []
 
-    def fake_get(params, interval):
-        calls.append(params["query"])
-        if len(calls) == 1:
-            return None, "HTTP 200: Your search contained a phrase that was too short."
-        return [{"url": "https://example.mx/oso", "title": "Oso ataca a perro", "seendate": "20261126T101500Z",
-                 "domain": "example.mx", "language": "Spanish", "sourcecountry": "Mexico"}], None
+    def fake_get(params, interval, backoff):
+        q = params["query"]
+        calls.append(q)
+        if q.startswith("(lobo OR lobos") and "coyote" in q:
+            return None, "HTTP 200: Your query was too short or too long."
+        if "oso" in q:
+            return [{"url": "https://example.mx/oso", "title": "Oso ataca a perro", "seendate": "20261126T101500Z",
+                     "domain": "example.mx", "language": "Spanish", "sourcecountry": "Mexico"}], None
+        return [], None
 
     monkeypatch.setattr(fetch_news, "_gdelt_get", fake_get)
     per_query = fetch_news.search_gdelt(cfg)
-    assert "sourcecountry:MX" in calls[0] and "sourcelang:spanish" in calls[0]
-    assert "ataque" in calls[0] and "ataque" not in calls[1]          # fallback drops conflict terms
-    rec = per_query[0][0]
-    assert rec["url"] == "https://example.mx/oso" and rec["date_source"] == "gdelt_seendate"
-    assert rec["published"].startswith("2026-11-26T10:15")
+    assert any("sourcecountry:MX" in c and "sourcelang:spanish" in c for c in calls)
+    canid_calls = [c for c in calls if "lobo" in c or "zorro" in c or "coyote" in c]
+    assert len(canid_calls) >= 3                            # rejected once, then split in two
+    rec = next(r for grp in per_query for r in grp if r["url"] == "https://example.mx/oso")
+    assert rec["date_source"] == "gdelt_seendate" and rec["published"].startswith("2026-11-26T10:15")

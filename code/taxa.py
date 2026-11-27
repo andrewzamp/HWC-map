@@ -200,5 +200,62 @@ def queries(cfg_search: dict) -> list[dict]:
     return out
 
 
+GDELT_LANG = {"en": "english", "es": "spanish", "fr": "french"}
+
+
+def _or(terms: list[str]) -> str:
+    """GDELT: OR-ed terms must be in parentheses; a single term must not be."""
+    return _q(terms[0]) if len(terms) == 1 else "(" + " OR ".join(_q(t) for t in terms) + ")"
+
+
+def gdelt_units(cfg_search: dict) -> list[dict]:
+    """GDELT query units, one or more per (group × edition).
+
+    Every unit of a language uses the SAME conflict-term set (first
+    `gdelt_conflict_terms_n` terms), so the query filter is identical across
+    taxa. Animal terms are split across units to respect the length limit;
+    each unit carries the group exclusions that share a word with its animal
+    terms (space is reserved for them).
+    """
+    max_len = cfg_search.get("gdelt_max_query_chars", 230)
+    n_c = cfg_search.get("gdelt_conflict_terms_n", 8)
+    units = []
+    for ed in cfg_search["editions"]:
+        lang = ed.get("terms", ed["language"][:2])
+        conflict = cfg_search["conflict_terms"][lang][:n_c]
+        filters = f" sourcecountry:{ed['country']} sourcelang:{GDELT_LANG.get(lang, lang)}"
+        for g in registry()["groups"]:
+            terms = g["query_terms"].get(lang) or []
+            excl = list(g.get("exclude_terms", {}).get(lang) or [])
+            unit = {"group": g["id"], "country": ed["country"], "language": ed["language"],
+                    "conflict": conflict, "filters": filters}
+            fits = lambda ch: len(gdelt_query({**unit, "terms": ch, "exclude": _relevant(excl, ch)})) <= max_len
+            chunk = []
+            for term in terms:
+                if chunk and not fits(chunk + [term]):
+                    units.append({**unit, "terms": chunk, "exclude": _relevant(excl, chunk)})
+                    chunk = []
+                chunk.append(term)
+            if chunk:
+                units.append({**unit, "terms": chunk, "exclude": _relevant(excl, chunk)})
+    return units
+
+
+def _relevant(exclusions: list[str], terms: list[str]) -> list[str]:
+    """Exclusions sharing a word stem with the query's animal terms
+    ("Fox News" ↔ "red fox"; "Timberwolves" ↔ "wolves"; "Chicago Bears" ↔ "bear")."""
+    stems = {w[:4] for t in terms for w in _norm(t).split()}
+    def hit(x):
+        words = _norm(x).split()
+        return any(w.startswith(s) or s in w for w in words for s in stems)
+    return [x for x in exclusions if hit(x)]
+
+
+def gdelt_query(unit: dict) -> str:
+    q = _or(unit["terms"]) + " " + _or(unit["conflict"])
+    q += "".join(f" -{_q(x)}" for x in unit["exclude"])
+    return q + unit["filters"]
+
+
 def _q(term: str) -> str:
     return f'"{term}"' if " " in term else term

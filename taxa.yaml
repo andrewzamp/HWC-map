@@ -11,8 +11,10 @@
 #
 # query_terms: words/phrases that must appear (OR-ed). Phrases are used for
 #   ambiguous words (e.g. "fox" alone matches every FOX-affiliated TV station).
-# exclude_terms: removed with Google's -"..." operator. Keep them specific:
-#   an over-broad exclusion silently removes true positives.
+# exclude_terms: removed with the -"..." operator. Only names with NO plausible
+#   animal meaning (teams, brands, people): an exclusion like "wolf pack" would
+#   silently remove real wolf stories. Each query carries only the exclusions
+#   sharing a word with its animal terms. Other noise is left to triage.
 # ambiguous names (e.g. Mexican "tejón" = coati, elsewhere badger) are listed
 #   under `ambiguous_names` and are NOT resolved by dictionary; the LLM decides.
 
@@ -45,11 +47,11 @@ groups:
     generic_names: [fox, foxes, zorro, zorros, zorra, canine, wild canine]
     color: "#0072B2"
     query_terms:
-      en: [wolf, wolves, coyote, coyotes, foxes, "red fox", "gray fox", "grey fox", "arctic fox", "rabid fox", "fox attack", "fox bit"]
+      en: [wolf, wolves, coyote, coyotes, foxes, "red fox", "gray fox", "grey fox", "arctic fox", "kit fox"]
       es: [lobo, lobos, "lobo mexicano", coyote, coyotes, zorro, zorros, zorra]
     exclude_terms:
-      en: ["Fox News", "Wolf Blitzer", Timberwolves, "lone wolf", smuggler, smuggling, "Wolf Pack"]
-      es: [pollero, migrantes, "El Zorro"]
+      en: ["Fox News", "Wolf Blitzer", Timberwolves]
+      es: ["El Zorro"]
     species:
       - scientific: Canis lupus
         name: gray wolf
@@ -82,7 +84,7 @@ groups:
       en: [cougar, cougars, "mountain lion", "mountain lions", puma, "Florida panther", bobcat, bobcats, lynx, jaguar, ocelot]
       es: [puma, pumas, "león de montaña", jaguar, jaguares, lince, ocelote, "gato montés"]
     exclude_terms:
-      en: ["Carolina Panthers", "Jacksonville Jaguars", "Jaguar Land Rover", "BYU Cougars", "Houston Cougars"]
+      en: ["Jacksonville Jaguars", "Jaguar Land Rover", "BYU Cougars", "Houston Cougars"]
       es: ["Pumas UNAM", "Jaguar Land Rover"]
     species:
       - scientific: Puma concolor
@@ -110,7 +112,7 @@ groups:
       en: [wolverine, "fisher cat", badger, otter, otters, mink, marten]
       es: [nutria, nutrias, "nutria de río", tejón, tejones, glotón]
     exclude_terms:
-      en: ["Michigan Wolverines", "Wisconsin Badgers", Marvel, "Hugh Jackman"]
+      en: ["Michigan Wolverines", "Wisconsin Badgers", "Erie Otters"]
       es: []
     species:
       - scientific: Gulo gulo
