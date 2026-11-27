@@ -17,16 +17,19 @@
 
   // ---- map ------------------------------------------------------------
   const map = L.map("map", { zoomControl: true }).setView([50, -105], 3);
+  // Keyless basemaps only (CARTO now requires an API key).
+  const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
   const base = {
-    "Light": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-      maxZoom: 19 }),
-    "Topographic": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}", {
+    "Light gray": L.tileLayer(ESRI + "Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors", maxZoom: 16 }),
+    "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 }),
+    "Topographic": L.tileLayer(ESRI + "World_Topo_Map/MapServer/tile/{z}/{y}/{x}", {
       attribution: "Tiles &copy; Esri", maxZoom: 19 }),
-    "Satellite": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-      attribution: "Tiles &copy; Esri", maxZoom: 19 }),
+    "Satellite": L.tileLayer(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "Tiles &copy; Esri &mdash; Maxar, Earthstar Geographics", maxZoom: 19 }),
   };
-  base.Light.addTo(map);
+  base["Light gray"].addTo(map);
   L.control.layers(base, null, { position: "topright" }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
 
@@ -216,8 +219,10 @@
       FEATURES.forEach((ft) => markers.set(ft.properties.event_id, markerFor(ft)));
       Object.keys(FACETS).forEach(buildFacet);
       const m = fc.metadata || {};
-      $("meta").innerHTML = `${m.n_events ?? FEATURES.length} events from ${m.n_articles_processed ?? "?"} articles` +
-        `<br>updated ${esc((m.generated_at || "").replace("T", " ").slice(0, 16))} UTC`;
+      $("meta").innerHTML = m.generated_at
+        ? `${m.n_events ?? FEATURES.length} events from ${m.n_articles_processed ?? "?"} articles` +
+          `<br>updated ${esc(m.generated_at.replace("T", " ").slice(0, 16))} UTC`
+        : "No data yet — waiting for the first pipeline run";
       const vis = render();
       if (vis.length) map.fitBounds(L.latLngBounds(vis.map((f) => [f.geometry.coordinates[1], f.geometry.coordinates[0]])).pad(0.2), { maxZoom: 7 });
       const h = decodeURIComponent((location.hash.match(/event=([^&]+)/) || [])[1] || "");
