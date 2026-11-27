@@ -95,7 +95,9 @@ Locally, the same overrides are environment variables: `HWC_TAXON`, `HWC_START_D
 2. **Settings → Pages** → *Deploy from a branch* → `main` / `/docs`.
 3. **Actions → Update HWC map → Run workflow** for the first run. After that it runs daily (05:17 UTC).
 
-Each run processes at most `max_articles_per_run` articles (config); any backlog carries over to the next run. On a **private** repo, Actions minutes count against your plan's monthly quota; public repos run free.
+Each run's processing is bounded by **time**, not by an article count: `llm.time_budget_s` (4 h by default), of which at most 20% goes to triage. That keeps the job inside its 300-min timeout however fast the runner is. Unprocessed articles carry over to the next run, newest first, and triage verdicts are cached in `data/triage_cache.jsonl` so they aren't recomputed. The repo is public, so Actions minutes are free.
+
+Input length is the main cost on the CPU runner (~15 tokens/s). The model therefore gets a condensed text (`code/textsel.py`): the article lead, then later sentences that name the animal or an outcome, up to 2,400 characters. Articles that triage marked *unsure* are only extracted if their text has an animal name within 25 words of a conflict word. On a **private** repo, Actions minutes count against your plan's monthly quota; public repos run free.
 
 Ollama is downloaded only when its version changes (binary and model are both cached). Set `OLLAMA_VERSION` in the workflow to pin it; the version used is recorded in every extracted row.
 

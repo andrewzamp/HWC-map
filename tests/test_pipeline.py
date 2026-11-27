@@ -42,6 +42,7 @@ def _patch_extract(monkeypatch, tmp_path, arts_rows, existing=None):
     monkeypatch.setattr(extract, "ARTICLES", arts)
     monkeypatch.setattr(extract, "EXTRACTIONS", out)
     monkeypatch.setattr(extract, "CACHE", tmp_path)
+    monkeypatch.setattr(extract, "TRIAGE_CACHE", tmp_path / "triage_cache.jsonl")
     monkeypatch.setattr(extract, "resolve_url", lambda u, i: None)   # no network
     monkeypatch.setattr(extract.time, "sleep", lambda s: None)
     return out
@@ -379,3 +380,91 @@ def test_max_queries_caps_requests(monkeypatch):
     monkeypatch.setattr(fetch_news, "_gdelt_get", lambda p, i, b: (calls.append(p) or ([], None)))
     fetch_news.search_gdelt(common.load_config())
     assert len(calls) == 4
+
+
+def test_time_budget_carries_over_and_reuses_triage(tmp_path, monkeypatch):
+    arts = [{"id": f"a{i}", "title": f"Coyote attacks dog {i}", "gnews_url": "g",
+             "fetched": f"2026-11-27T10:00:0{i}"} for i in range(3)]
+    out = _patch_extract(monkeypatch, tmp_path, arts)
+    calls, clock = [], [0.0]
+    monkeypatch.setattr(extract.time, "time", lambda: clock[0])     # simulated clock: each LLM call = 10 s
+
+    class FakeLLM:
+        def __init__(self, cfg): pass
+        def runtime_version(self): return "t"
+        def structured(self, system, user, cls, early_stop=None):
+            calls.append(cls.__name__)
+            clock[0] += 10
+            if cls is Triage:
+                return Triage(reasoning="Coyote.", verdict="relevant")
+            return cls.model_validate(_ex())
+
+    monkeypatch.setattr(extract, "LLMClient", FakeLLM)
+    monkeypatch.setattr(extract, "Geocoder", FakeGeo)
+    import common
+    real = common.load_config
+    cfg = real()
+    cfg["llm"]["time_budget_s"] = 25         # 3 triage calls = 30 s → no time left for extraction
+    cfg["llm"]["triage_budget_fraction"] = 1.0
+    monkeypatch.setattr(extract, "load_config", lambda: cfg)
+    assert extract.main() == 0                                      # nothing extracted...
+    assert calls == ["Triage"] * 3                                  # ...but all triaged and cached
+    cfg["llm"]["time_budget_s"] = None                              # next run: no limit
+    calls.clear()
+    assert extract.main() == 3
+    assert "Triage" not in calls                                    # verdicts reused, not recomputed
+    assert len(out.read_text().splitlines()) == 3
+
+
+# --- text selection & gate ------------------------------------------------------
+
+def test_text_gate():
+    import textsel
+    assert textsel.animal_conflict_context(
+        "Conservation officers say a grizzly bear attacked a hiker near Sicamous. He was taken to hospital.")
+    assert not textsel.animal_conflict_context(       # sports: team name, no conflict word nearby
+        "The Memphis Grizzlies beat the Warriors 120-101. Morant scored 31 in a career night; the match was never close.")
+    assert not textsel.animal_conflict_context(       # round-up matched on a stray word
+        "Council approved the budget. The zoo opened a new exhibit. Grizzly Peak trail closes for maintenance.")
+    assert textsel.animal_conflict_context(None)      # headline-only: never gated
+
+
+def test_condense_keeps_lead_and_late_outcomes():
+    import textsel
+    text = ("A grizzly bear was captured in Bella Coola after the fatal attacks, officials said. "
+            + "Residents met at the hall to talk about the weekend market. " * 30
+            + "The bear was later euthanized. " + "The mayor thanked volunteers. " * 10)
+    c = textsel.condense(text, max_chars=500, lead_chars=150)
+    assert c.startswith("A grizzly bear was captured") and "euthanized" in c and "[…]" in c
+    assert len(c) <= 520
+    assert textsel.condense("Short text.", 500) == "Short text."
+
+
+def test_unsure_without_context_is_gated(tmp_path, monkeypatch):
+    out = _patch_extract(monkeypatch, tmp_path, [{"id": "a1", "title": "November recap: news you missed",
+                                                  "url": "https://x", "gnews_url": None}])
+    (tmp_path / "a1.txt").write_text("Council approved the budget. " * 20 + "Grizzly Peak trail closes for repairs.")
+    calls = []
+
+    class FakeLLM:
+        def __init__(self, cfg): pass
+        def runtime_version(self): return "t"
+        def structured(self, system, user, cls, early_stop=None):
+            calls.append(cls.__name__)
+            return Triage(reasoning="No animal named.", verdict="unsure")
+
+    monkeypatch.setattr(extract, "LLMClient", FakeLLM)
+    monkeypatch.setattr(extract, "Geocoder", FakeGeo)
+    assert extract.main() == 1
+    row = json.loads(out.read_text())
+    assert calls == ["Triage"] and row["text_gate"] and row["is_specific_event"] is False
+
+
+def test_sports_exclusions_and_triage_rule():
+    import common
+    s = common.load_config()["search"]
+    grizzly_us = next(taxa.gdelt_query(u) for u in taxa.gdelt_units(s)
+                      if u["country"] == "US" and "grizzly" in u["terms"])
+    assert '-"Memphis Grizzlies"' in grizzly_us
+    assert all(len(taxa.gdelt_query(u)) <= s["gdelt_max_query_chars"] for u in taxa.gdelt_units(s))
+    assert "Sports: team names are NOT animals" in extract.TRIAGE_SYSTEM

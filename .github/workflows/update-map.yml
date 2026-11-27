@@ -41,7 +41,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 300   # must exceed llm.time_budget_s + fetch budget + ~10 min (config.yaml)
     env:
       OLLAMA_MODELS: ${{ github.workspace }}/.ollama-models
       OLLAMA_HOME_DIR: ${{ github.workspace }}/.ollama-dist

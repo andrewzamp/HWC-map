@@ -16,6 +16,7 @@ CACHE = DATA / "cache"                 # git-ignored: article full text
 ARTICLES = DATA / "articles.jsonl"     # one row per fetched article (metadata only)
 EXTRACTIONS = DATA / "extractions.jsonl"  # one row per article: LLM output + geocode
 GEOCACHE = DATA / "geocode_cache.json"
+TRIAGE_CACHE = DATA / "triage_cache.jsonl"  # triage verdicts of articles still awaiting extraction
 GEOJSON = ROOT / "docs" / "data" / "events.geojson"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

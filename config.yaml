@@ -24,8 +24,8 @@ search:
     es: [ataque, atacó, mordió, rabia, mató, ganado, gallinas, mordida, ataca, matan, borregos,
          mascota, perro, avistamiento, conflicto]
   period: 7d                  # look-back window (GDELT keeps a rolling ~3 months; e.g. 30d to backfill)
-  max_results_per_query: 50   # per (group × edition) query; GDELT max 250, Google max 100
-  max_new_articles: 40        # new articles accepted per run (sampled round-robin across queries)
+  max_results_per_query: 250  # per query; GDELT max 250 (same single request, so no extra rate-limit cost)
+  max_new_articles: 150       # new articles queued per run (sampled round-robin across queries)
   max_queries: null           # cap on GDELT queries per run (null = all); rotation covers the rest on later runs
   taxon_filter: null          # e.g. "coyote", "Puma concolor" or "felids"; null = all taxa
   start_date: null            # YYYY-MM-DD; with end_date, overrides `period` (GDELT: last ~3 months only)
@@ -44,7 +44,11 @@ search:
 
 fulltext:
   enabled: true
-  max_chars: 3500             # text passed to the LLM (≈900 tokens; news leads carry the facts)
+  # The model reads ~15 tokens/s on the CPU runner, so input length is the main
+  # cost. Text is condensed (code/textsel.py): the lead, then later sentences
+  # naming the animal or an outcome, up to max_chars (≈600 tokens).
+  max_chars: 2400
+  lead_chars: 1000
   request_interval_s: 1
 
 triage:
@@ -64,9 +68,16 @@ llm:
   num_ctx: 8192
   num_predict: 700            # hard cap on output tokens per call
   max_retries: 2
-  # Articles processed per run (triage + extraction); the rest wait for the
-  # next run. Keeps a run well inside the Actions time limit.
-  max_articles_per_run: 40
+  # Processing is bounded by TIME, not by a count, so a run is safe whatever
+  # the runner's speed; unprocessed articles carry over (newest first).
+  # Public repo → Actions minutes are free; the hard limit is the job timeout
+  # (workflow timeout-minutes: 300; GitHub's maximum is 360).
+  # Budget: setup ~5 + fetch <=16 + extract 240 + build/commit ~2 = ~263 min
+  # worst case (~37 min margin). Raise time_budget_s only together with the
+  # workflow's timeout-minutes.
+  max_articles_per_run: 400   # upper bound only; the time budget normally binds first
+  time_budget_s: 14400        # 4 h for triage + extraction
+  triage_budget_fraction: 0.2   # triage (~9 s/headline) stops at 20% of the budget; leftovers keep their verdict
 
 geocoding:
   provider: nominatim

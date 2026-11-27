@@ -21,11 +21,12 @@ import re
 import time
 from datetime import datetime, timezone
 
-from common import ARTICLES, CACHE, EXTRACTIONS, append_jsonl, load_config, norm_title, read_jsonl, write_jsonl
+from common import ARTICLES, CACHE, EXTRACTIONS, TRIAGE_CACHE, append_jsonl, load_config, norm_title, read_jsonl, write_jsonl
 from fetch_news import STATS as FT_STATS, download_text, resolve_url
 from geocode import Geocoder
 from llm import EarlyStop, LLMClient
 import taxa
+import textsel
 from schema import EXTRACTION_VERSION, Extraction, Triage, field_guide
 
 log = logging.getLogger("extract")
@@ -50,6 +51,12 @@ Wolverines, Badgers, Coyotes), "bear market", TV stations named FOX, human smugg
 TRIAGE_SYSTEM = f"""You screen news headlines for a database of human-wildlife conflict involving \
 wild carnivores. Headlines may be in English or Spanish. Your ONLY job is to tell whether the \
 animal word refers to the real animal. Do not judge whether a conflict happened.
+
+Sports: team names are NOT animals. If the headline is about a game, score, season, \
+player, athlete, coach, roster or tournament, answer 'irrelevant' (e.g. Grizzlies, Bears, \
+Lions, Panthers, Jaguars, Wolves, Timberwolves, Coyotes, Bruins, Otters, Pumas, Wolverines, Badgers).
+Headlines that name no animal at all (news round-ups, lists, history columns) are 'unsure', \
+never 'relevant'.
 
 Spanish names: oso = bear, lobo = wolf, coyote = coyote, zorro/zorra = fox, puma/león de montaña = \
 cougar, jaguar, lince = lynx/bobcat, nutria = OTTER (not coypu), tejón = badger or coati, \
@@ -106,12 +113,15 @@ def get_text(a: dict, cfg: dict) -> str | None:
     return None
 
 
-def build_prompt(a: dict, text: str | None, max_chars: int) -> tuple[str, str]:
+def build_prompt(a: dict, text: str | None, max_chars: int, lead_chars: int = 1000) -> tuple[str, str]:
     snippet = a.get("snippet") or ""
     # Google News RSS 'snippets' are usually just the headline repeated.
     snippet_is_headline = norm_title(snippet).startswith(norm_title(a.get("title", ""))[:40])
     if text:
-        source, body, tag = "full article text", text[:max_chars], "fulltext"
+        body = textsel.condense(text, max_chars, lead_chars)
+        source = "full article text" if body == text.strip() else \
+            "article lead + later sentences about the animal or the outcome ('[…]' = text skipped)"
+        tag = "fulltext"
     elif snippet and not snippet_is_headline:
         source, body, tag = "headline and short snippet only", snippet, "snippet"
     else:
@@ -145,6 +155,15 @@ def main() -> int:
     if not todo:
         return 0
 
+    t_start = time.time()
+    budget = cfg["llm"].get("time_budget_s")
+    budget = float("inf") if budget is None else float(budget)
+    triage_deadline = t_start + budget * cfg["llm"].get("triage_budget_fraction", 0.35)
+    deadline = t_start + budget
+    # triage verdicts already computed in earlier runs (articles that then ran out of time)
+    cached = {r["id"]: Triage(reasoning=r["reasoning"], verdict=r["verdict"]) for r in read_jsonl(TRIAGE_CACHE)
+              if r.get("extraction_version") == EXTRACTION_VERSION}
+
     llm = LLMClient(cfg["llm"])
     runtime = llm.runtime_version()
     log.info("LLM runtime: %s", runtime)
@@ -160,12 +179,21 @@ def main() -> int:
         triage: dict[str, Triage] = {}
         if cfg.get("triage", {}).get("enabled", True):
             for i, a in enumerate(todo, 1):
+                if a["id"] in cached:
+                    triage[a["id"]] = cached[a["id"]]
+                    continue
+                if time.time() > triage_deadline:
+                    log.info("triage time share used up after %d headlines; the rest carry over", i - 1)
+                    break
                 try:
                     triage[a["id"]] = tr = llm.structured(
                         TRIAGE_SYSTEM, f"Outlet: {a.get('publisher')}\nHeadline: {a.get('title')}", Triage)
                 except Exception as e:
                     log.error("[triage %d/%d] %s failed: %s", i, len(todo), a["id"], e)
                     continue
+                if tr.verdict != "irrelevant":   # remembered in case extraction runs out of time
+                    append_jsonl(TRIAGE_CACHE, [{"id": a["id"], "extraction_version": EXTRACTION_VERSION,
+                                                 "verdict": tr.verdict, "reasoning": tr.reasoning}])
                 log.info("[triage %d/%d] %-10s | %s", i, len(todo), tr.verdict, (a.get("title") or "")[:80])
                 if tr.verdict == "irrelevant":
                     append_jsonl(EXTRACTIONS, [{"id": a["id"], **stamp(), "triage_verdict": tr.verdict,
@@ -178,13 +206,26 @@ def main() -> int:
 
         # Pass 2 — full text + structured extraction + taxon + geocoding
         for i, a in enumerate(todo, 1):
+            if time.time() > deadline:
+                log.info("time budget reached: %d of %d triaged articles extracted; the rest carry over",
+                         i - 1, len(todo))
+                break
             tr = triage.get(a["id"])
             base = {"id": a["id"], **stamp(), "triage_verdict": tr.verdict if tr else None,
                     "triage_reasoning": tr.reasoning if tr else None}
             t0 = time.time()
             try:
                 text = get_text(a, cfg)
-                user, text_source = build_prompt(a, text, cfg["fulltext"]["max_chars"])
+                if tr is not None and tr.verdict == "unsure" and not textsel.animal_conflict_context(text):
+                    append_jsonl(EXTRACTIONS, [{**base, "text_source": "fulltext", "is_specific_event": False,
+                                                "real_wild_carnivore_involved": None,
+                                                "text_gate": "no animal name near a conflict word", **NULL_GEO}])
+                    n_ok += 1
+                    log.info("[%d/%d] %s | unsure + text gate: no animal-conflict context | %s",
+                             i, len(todo), a["id"], (a.get("title") or "")[:70])
+                    continue
+                user, text_source = build_prompt(a, text, cfg["fulltext"]["max_chars"],
+                                                 cfg["fulltext"].get("lead_chars", 1000))
                 t1 = time.time()
                 ex = llm.structured(SYSTEM, user, Extraction, early_stop=early_stop)
             except Exception as e:

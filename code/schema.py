@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 import taxa
 
-EXTRACTION_VERSION = 5   # bump when schema/prompt change → old rows are re-extracted
+EXTRACTION_VERSION = 6   # bump when schema/prompt change → old rows are re-extracted
 
 Taxon = Literal[tuple(taxa.taxon_labels())]
 

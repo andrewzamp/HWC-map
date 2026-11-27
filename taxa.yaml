@@ -28,7 +28,7 @@ groups:
       en: [bear, bears, grizzly, grizzlies]
       es: [oso, osos, osa]
     exclude_terms:
-      en: ["Chicago Bears", "bear market", "Care Bears", "teddy bear"]
+      en: ["Chicago Bears", "Memphis Grizzlies", "Montana Grizzlies", "bear market", "Care Bears", "teddy bear"]
       es: ["oso de peluche"]
     species:
       - scientific: Ursus americanus
@@ -84,7 +84,7 @@ groups:
       en: [cougar, cougars, "mountain lion", "mountain lions", puma, "Florida panther", bobcat, bobcats, lynx, jaguar, ocelot]
       es: [puma, pumas, "león de montaña", jaguar, jaguares, lince, ocelote, "gato montés"]
     exclude_terms:
-      en: ["Jacksonville Jaguars", "Jaguar Land Rover", "BYU Cougars", "Houston Cougars"]
+      en: ["Jacksonville Jaguars", "Jaguar Land Rover", "Florida Panthers", "BYU Cougars", "Houston Cougars"]
       es: ["Pumas UNAM", "Jaguar Land Rover"]
     species:
       - scientific: Puma concolor
