@@ -1,34 +1,39 @@
-# HWC-map pipeline configuration
-# Everything a user might want to tweak lives here, so scaling to new
-# taxa / regions means adding a block, not editing code.
+# HWC-map pipeline configuration.
+# Taxa (species, search terms, colours) live in taxa.yaml.
 
 search:
-  # Google News search syntax (via the `gnews` package). Kept deliberately
-  # broad on the conflict side and narrow on the taxon side; the LLM step
-  # does the real relevance filtering (is_specific_event).
-  query: >-
-    (bear OR grizzly OR "black bear" OR "polar bear")
-    (attack OR attacked OR mauled OR charged OR encounter OR "break-in"
-    OR "broke into" OR killed OR euthanized OR livestock OR garbage OR conflict)
-  language: en
-  # One query per country edition; results are merged and de-duplicated.
-  countries: [US, CA]
-  period: 30d            # look-back window passed to Google News
-  max_results_per_country: 15
-  max_new_articles: 20   # hard cap per run (keep small while prototyping)
+  # One query per (taxon group × edition):
+  #   (<group query_terms>) (<conflict_terms>) -"<exclude_terms>"
+  # The LLM triage + extraction steps do the real relevance filtering.
+  editions:
+    - {country: US, language: en}
+    - {country: CA, language: en}
+    - {country: MX, language: es-419, terms: es}
+  conflict_terms:
+    en: [attack, attacked, attacks, mauled, bitten, bit, rabid, rabies, killed, euthanized,
+         livestock, cattle, sheep, goats, chickens, pet, dog, cat, "broke into", encounter, conflict]
+    es: [ataque, atacó, ataca, mordió, mordida, rabia, mató, matan, ganado, borregos, gallinas,
+         mascota, perro, avistamiento, conflicto]
+  period: 30d                 # look-back window passed to Google News
+  max_results_per_query: 20   # per (group × edition) query; Google caps at 100
+  max_new_articles: 20        # new articles accepted per run (sampled round-robin across queries)
   exclude_websites: []
 
 fulltext:
-  enabled: true          # decode Google News redirect + download article body
-  max_chars: 6000        # text passed to the LLM (≈1.5k tokens)
-  request_interval_s: 1  # politeness delay between Google News URL decodes
+  enabled: true
+  max_chars: 6000             # text passed to the LLM (≈1.5k tokens)
+  request_interval_s: 1
+
+triage:
+  # Cheap headline-only relevance check before full-text download and full
+  # extraction. Only articles judged "clearly irrelevant" are skipped; "unsure"
+  # goes through, so triage trades a little recall for a lot of compute.
+  enabled: true
 
 llm:
-  # backend: "ollama" (local / on the Actions runner) or "openai"
-  # (any OpenAI-compatible endpoint serving an open-weight model:
-  # Groq, HF Inference router, OpenRouter, vLLM, llama.cpp server...).
-  # Env vars override: HWC_LLM_BACKEND, HWC_LLM_MODEL, HWC_LLM_BASE_URL,
-  # HWC_LLM_API_KEY.
+  # backend: "ollama" or "openai" (any OpenAI-compatible endpoint serving an
+  # open-weight model). Env overrides: HWC_LLM_BACKEND, HWC_LLM_MODEL,
+  # HWC_LLM_BASE_URL, HWC_LLM_API_KEY.
   backend: ollama
   model: qwen2.5:7b-instruct
   base_url: http://localhost:11434
@@ -38,13 +43,12 @@ llm:
 
 geocoding:
   provider: nominatim
-  user_agent: "HWC-map/0.1 (+https://github.com/andrewzamp/HWC-map)"
-  countrycodes: [us, ca]
-  min_interval_s: 1.1    # Nominatim usage policy: max 1 request/s
+  user_agent: "HWC-map/0.3 (+https://github.com/andrewzamp/HWC-map)"
+  countrycodes: [us, ca, mx]
+  min_interval_s: 1.1         # Nominatim usage policy: max 1 request/s
 
 dedup:
-  # Articles describing the same event are merged into one map feature
-  # when ALL of these hold (single-linkage clustering).
+  # Reports are merged into one event when ALL hold (single-linkage).
+  # Same taxon = same species, or same group when species is unidentified.
   max_distance_km: 30
   max_days_apart: 3
-  same_species_required: true

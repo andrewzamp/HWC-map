@@ -1,4 +1,10 @@
-"""Step 2 — full-text retrieval, LLM metadata extraction, geocoding.
+"""Step 2 — triage, full-text retrieval, LLM metadata extraction, taxon
+resolution, geocoding.
+
+* Triage: a cheap headline-only LLM call screens out clearly irrelevant hits
+  (sports teams, Fox News, 'bear spray' assaults, smugglers...) before the
+  expensive steps. Only 'irrelevant' is skipped; 'unsure' goes through. The
+  triage verdict and reasoning are stored for every article (auditable).
 
 * Incremental: each article is processed once per EXTRACTION_VERSION. Rows
   produced by an older schema/prompt version are dropped and redone, so
@@ -17,23 +23,35 @@ from common import ARTICLES, CACHE, EXTRACTIONS, append_jsonl, load_config, norm
 from fetch_news import download_text, resolve_url
 from geocode import Geocoder
 from llm import LLMClient
-from schema import EXTRACTION_VERSION, Extraction, field_guide
+import taxa
+from schema import EXTRACTION_VERSION, Extraction, Triage, field_guide
 
 log = logging.getLogger("extract")
 
 SYSTEM = f"""You are an information-extraction assistant for a scientific database of \
-human-wildlife conflict involving bears (the animal) in North America.
+human-wildlife conflict involving wild carnivores (bears, wolves, coyotes, foxes, wild cats, \
+weasel family, raccoons, coatis, skunks) in North America. Articles may be in English or Spanish.
 
 Rules:
 - Extract only what the text states or directly implies. Never invent details.
 - When information is missing or ambiguous, use null or "unknown" rather than guessing.
-- Many news items mention "bear spray" used by people on other people (robberies, assaults). \
-These do NOT involve a bear: real_bear_involved=false, is_specific_event=false.
+- Frequent false positives: "bear spray" used on people, sports teams (Bears, Panthers, Jaguars, \
+Wolverines, Badgers, Coyotes), "bear market", TV stations named FOX, human smugglers called \
+"coyotes", cars (Jaguar), people's surnames (Wolf, Fox). These are NOT wild carnivores.
 - event_date is when the incident happened, not when the article was published.
 - Read the headline carefully: it often states species, outcome and place.
+- Write summary in English whatever the article language.
 - Return one JSON object with exactly these fields:
 
-{field_guide()}"""
+{field_guide(Extraction)}"""
+
+TRIAGE_SYSTEM = f"""You screen news headlines for a database of human-wildlife conflict involving \
+wild carnivores in North America. Headlines may be English or Spanish. Be lenient: answer \
+'irrelevant' only when you are sure. Return JSON with these fields:
+
+{field_guide(Triage)}"""
+
+NULL_GEO = {"lat": None, "lon": None, "geocode_level": "none", "geocode_query": None, "geocode_match": None}
 
 
 def get_text(a: dict, cfg: dict) -> str | None:
@@ -87,39 +105,60 @@ def main() -> int:
         return 0
 
     llm = LLMClient(cfg["llm"])
+    runtime = llm.runtime_version()
+    log.info("LLM runtime: %s", runtime)
     geo = Geocoder(cfg["geocoding"])
     n_ok = 0
+    stamp = lambda: {"extraction_version": EXTRACTION_VERSION,
+                     "extracted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                     "llm_backend": cfg["llm"]["backend"], "llm_model": cfg["llm"]["model"],
+                     "llm_runtime": runtime}
     try:
+        # Pass 1 — triage all headlines. Kept separate from pass 2 so that each
+        # pass reuses one identical system prompt (Ollama's prompt-prefix cache).
+        triage: dict[str, Triage] = {}
+        if cfg.get("triage", {}).get("enabled", True):
+            for i, a in enumerate(todo, 1):
+                try:
+                    triage[a["id"]] = tr = llm.structured(
+                        TRIAGE_SYSTEM, f"Outlet: {a.get('publisher')}\nHeadline: {a.get('title')}", Triage)
+                except Exception as e:
+                    log.error("[triage %d/%d] %s failed: %s", i, len(todo), a["id"], e)
+                    continue
+                log.info("[triage %d/%d] %-10s | %s", i, len(todo), tr.verdict, (a.get("title") or "")[:80])
+                if tr.verdict == "irrelevant":
+                    append_jsonl(EXTRACTIONS, [{"id": a["id"], **stamp(), "triage_verdict": tr.verdict,
+                                                "triage_reasoning": tr.reasoning, "text_source": None,
+                                                "is_specific_event": False,
+                                                "real_wild_carnivore_involved": False, **NULL_GEO}])
+                    n_ok += 1
+            todo = [a for a in todo if a["id"] in triage and triage[a["id"]].verdict != "irrelevant"]
+            log.info("triage kept %d articles for full extraction", len(todo))
+
+        # Pass 2 — full text + structured extraction + taxon + geocoding
         for i, a in enumerate(todo, 1):
-            text = get_text(a, cfg)
-            user, text_source = build_prompt(a, text, cfg["fulltext"]["max_chars"])
+            tr = triage.get(a["id"])
+            base = {"id": a["id"], **stamp(), "triage_verdict": tr.verdict if tr else None,
+                    "triage_reasoning": tr.reasoning if tr else None}
             try:
+                text = get_text(a, cfg)
+                user, text_source = build_prompt(a, text, cfg["fulltext"]["max_chars"])
                 ex: Extraction = llm.structured(SYSTEM, user, Extraction)
             except Exception as e:
                 log.error("[%d/%d] %s — extraction failed: %s", i, len(todo), a["id"], e)
                 continue  # not recorded → retried next run
-            g = (geo.geocode(ex.location_name, ex.admin1, ex.country) if ex.is_specific_event
-                 else {"lat": None, "lon": None, "geocode_level": "none",
-                       "geocode_query": None, "geocode_match": None})
-            append_jsonl(EXTRACTIONS, [{
-                "id": a["id"],
-                "extraction_version": EXTRACTION_VERSION,
-                "extracted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "llm_backend": cfg["llm"]["backend"],
-                "llm_model": cfg["llm"]["model"],
-                "text_source": text_source,
-                **ex.model_dump(),
-                **g,
-            }])
+            tx = taxa.resolve(ex.taxon, ex.animal_name)
+            g = geo.geocode(ex.location_name, ex.admin1, ex.country) if ex.is_specific_event else NULL_GEO
+            append_jsonl(EXTRACTIONS, [{**base, "text_source": text_source, **ex.model_dump(), **tx, **g}])
             n_ok += 1
-            log.info("[%d/%d] %s | %s | event=%s | %s | %s, %s | geo=%s | %s", i, len(todo), a["id"],
-                     text_source, ex.is_specific_event, ex.species, ex.location_name, ex.admin1,
-                     g["geocode_level"], (a.get("title") or "")[:70])
+            log.info("[%d/%d] %s | %s | event=%s | %s (%s, %s) | %s, %s | geo=%s | %s", i, len(todo), a["id"],
+                     text_source, ex.is_specific_event, tx["taxon"], ex.animal_name, tx["taxon_check"],
+                     ex.location_name, ex.admin1, g["geocode_level"], (a.get("title") or "")[:70])
             geo.save()
     finally:
         write_jsonl(ARTICLES, articles)  # persist resolved URLs / has_fulltext
     n_ft = sum(a.get("has_fulltext", False) for a in todo)
-    log.info("extracted %d/%d (full text for %d)", n_ok, len(todo), n_ft)
+    log.info("processed %d articles; full text retrieved for %d/%d extracted", n_ok, n_ft, len(todo))
     return n_ok
 
 

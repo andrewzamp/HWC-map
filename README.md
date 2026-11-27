@@ -1,7 +1,7 @@
 # HWC-map
 
 A near-real-time map of **human–wildlife conflict (HWC)** events mined from online news.
-Prototype scope: **bears (*Ursus americanus*, *U. arctos*, *U. maritimus*) in the USA and Canada**.
+Scope: **wild terrestrial Carnivora in the USA, Canada and Mexico** (English and Spanish news). Taxa are defined in [`taxa.yaml`](taxa.yaml).
 
 **🗺️ Live map: <https://andrewzamp.github.io/HWC-map/>**
 
@@ -22,17 +22,28 @@ Google News (gnews) ──► article metadata + full text ──► open-weight
 
 | Step | Script | What it does |
 |---|---|---|
-| fetch | `code/fetch_news.py` | Queries Google News (US + CA editions, interleaved) with the query in `config.yaml`, drops already-seen URLs and syndicated duplicate headlines. Stores metadata only. |
-| extract | `code/extract.py` | Decodes the Google redirect and downloads the article body with `trafilatura` (retried on later runs if it fails), then sends headline + date + body to an open-weight LLM together with a definition of every field. The JSON schema in `code/schema.py` constrains decoding, and the output is validated with pydantic. Place names are then geocoded with OSM Nominatim (`code/geocode.py`). Incremental: each article is processed once. |
+| fetch | `code/fetch_news.py` | Runs one Google News query per **taxon group × edition** (US-en, CA-en, MX-es), built from `taxa.yaml` and `config.yaml`. Results are sampled round-robin across queries, and already-seen URLs and syndicated duplicate headlines are dropped. Stores metadata only. |
+| extract | `code/extract.py` | **Pass 1, triage**: a cheap headline-only LLM call skips clearly irrelevant hits (sports teams, Fox News, "bear spray" assaults, smugglers called "coyotes"…). Only *irrelevant* is skipped, *unsure* goes through, and every verdict is stored. **Pass 2, extraction**: downloads the article body (retried on later runs if it fails), then sends headline + date + body to an open-weight LLM with a definition of every field. Output is constrained to the JSON schema in `code/schema.py` and validated with pydantic. Taxon resolution and Nominatim geocoding follow. Incremental: each article is processed once per extraction version. |
 | build | `code/build_map_data.py` | Keeps specific events, merges reports of the same incident, writes GeoJSON for the map and a flat CSV for analysis. |
 
 Run everything: `python code/pipeline.py` (or a single step: `python code/pipeline.py fetch|extract|build`).
 
+### Taxa (`taxa.yaml`)
+The registry is the single source of truth for each taxon group's search terms (EN/ES), excluded terms (`-"Chicago Bears"`, `-"Fox News"`…), the closed species vocabulary the model must choose from, name synonyms and map colours. Adding a species or group there updates queries, the schema and the map; then bump `EXTRACTION_VERSION`. Nomenclature follows the Mammal Diversity Database.
+
+**Species identification is resolved twice, independently.** The LLM picks a standardised label from the registry, and the animal name *as written* (`animal_name`) is matched against registry synonyms. The result is stored in `taxon_check`:
+- `agree`: both resolutions give the same taxon.
+- `dictionary more specific` / `llm more specific`: one resolution refines the other within the same group.
+- `disagree`: the two conflict. The record is kept, flagged on the map, and can be filtered out in analyses.
+- `no dictionary match`: the name isn't in the registry.
+
+Generic names ("fox", "skunk", "otter") resolve to *unidentified <group>*, never to a species. Context-dependent names (e.g. *tejón*: coati in Mexico, badger elsewhere) are not resolved by the dictionary at all.
+
 ### Extracted fields (`code/schema.py`)
-`relevance_reasoning`, `real_bear_involved`, `is_specific_event`, `multiple_events`, `event_date` (+ precision), `species` (+ evidence),
-`n_bears`, `conflict_types` / `primary_conflict_type`, `human_activity`, `human_outcome`,
-`n_people_injured/killed`, `bear_outcome`, `location_name`, `admin1`, `country`,
-`location_precision`, `summary`, `confidence`, `notes`. Each row also stores the LLM model,
+`relevance_reasoning`, `real_wild_carnivore_involved`, `is_specific_event`, `multiple_events`, `animal_name`, `taxon` (+ evidence; scientific name, family and group added from the registry),
+`n_animals`, `event_date` (+ precision), `conflict_types` / `primary_conflict_type` (including rabies/disease exposure), `human_activity`, `human_outcome`,
+`n_people_injured/killed`, `domestic_animal_type/outcome`, `rabies_status`, `animal_outcome`, `location_name`, `admin1`, `country`,
+`location_precision`, `summary`, `confidence`, `notes`. Each row also stores the triage verdict, the LLM model and runtime version,
 whether the extraction used the full text, a snippet or only the headline, the extraction version (bumping `EXTRACTION_VERSION` in `schema.py` re-processes all articles), and the geocoding level
 (`place` / `admin1` / `none`) with the matched OSM feature.
 
@@ -64,9 +75,12 @@ Tests (offline, no LLM): `pytest -q`
 2. **Settings → Pages** → *Deploy from a branch* → `main` / `/docs`.
 3. **Actions → Update HWC map → Run workflow** for the first run. After that it runs daily (05:17 UTC).
 
+Ollama is downloaded only when its version changes (binary and model are both cached). Set `OLLAMA_VERSION` in the workflow to pin it; the version used is recorded in every extracted row.
+
 The map is then served at `https://andrewzamp.github.io/HWC-map/`.
 
 ## Known limitations / next steps
+- Query terms differ in how much noise they pull in ("fox", "jaguar", "coyote", "panther" are heavily polysemous), so **recall and precision differ by taxon and language**. Compare taxa only after measuring this.
 - Google News returns ≤ 100 items per query and its ranking is opaque, so the sample is **not** a census. Reporting effort varies by region and outlet, and the map shows *reported* conflicts. Any spatial or temporal analysis must account for this (e.g. by modelling media effort).
 - Paywalled or JS-rendered pages fall back to snippet-only extraction (flagged in the data).
 - A 7B model makes mistakes. Before scaling, hand-annotate a validation sample (~100–200 articles) and measure per-field accuracy. Precision/recall of `is_specific_event` is the priority.

@@ -61,6 +61,15 @@ class LLMClient:
         return r.json()["choices"][0]["message"]["content"]
 
     # -- public -------------------------------------------------------------
+    def runtime_version(self) -> str | None:
+        """Recorded with every extraction, for provenance/reproducibility."""
+        if self.backend != "ollama":
+            return self.base_url
+        try:
+            return "ollama " + requests.get(f"{self.base_url}/api/version", timeout=10).json()["version"]
+        except Exception:
+            return None
+
     def structured(self, system: str, user: str, model_cls: type[BaseModel]) -> BaseModel:
         schema = model_cls.model_json_schema()
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]

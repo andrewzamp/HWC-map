@@ -23,6 +23,10 @@ jobs:
     timeout-minutes: 90
     env:
       OLLAMA_MODELS: ${{ github.workspace }}/.ollama-models
+      OLLAMA_HOME_DIR: ${{ github.workspace }}/.ollama-dist
+      # Pin for reproducibility, e.g. "0.13.0". Empty = latest release (resolved
+      # once per run; the version used is written into every extracted row).
+      OLLAMA_VERSION: ""
       PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -53,21 +57,51 @@ jobs:
           n=$(python -c "import sys; sys.path.insert(0,'code'); from common import *; d={r['id'] for r in read_jsonl(EXTRACTIONS)}; print(sum(a['id'] not in d for a in read_jsonl(ARTICLES)))")
           echo "n=$n" >> "$GITHUB_OUTPUT"; echo "unprocessed articles: $n"
 
+      - name: Resolve Ollama version
+        if: steps.todo.outputs.n != '0'
+        id: ollama
+        run: |
+          v="${OLLAMA_VERSION}"
+          if [ -z "$v" ]; then
+            v=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest | python -c "import json,sys;print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"; echo "Ollama version: $v"
+
+      # Binary cached per version: downloaded only when the version changes.
+      - name: Cache Ollama binary
+        if: steps.todo.outputs.n != '0'
+        id: ollama-bin
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OLLAMA_HOME_DIR }}
+          key: ollama-bin-${{ steps.ollama.outputs.version }}-cpu
+
+      - name: Install Ollama (cache miss only)
+        if: steps.todo.outputs.n != '0' && steps.ollama-bin.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=${{ steps.ollama.outputs.version }} sh
+          sudo systemctl stop ollama || true; sudo systemctl disable ollama || true
+          mkdir -p "$OLLAMA_HOME_DIR/bin" "$OLLAMA_HOME_DIR/lib"
+          cp "$(command -v ollama)" "$OLLAMA_HOME_DIR/bin/"
+          if [ -d /usr/local/lib/ollama ]; then cp -r /usr/local/lib/ollama "$OLLAMA_HOME_DIR/lib/"; fi
+          # CPU-only runner: drop GPU libraries to keep the cache small
+          rm -rf "$OLLAMA_HOME_DIR"/lib/ollama/cuda_* "$OLLAMA_HOME_DIR"/lib/ollama/rocm* "$OLLAMA_HOME_DIR"/lib/ollama/*vulkan* || true
+          du -sh "$OLLAMA_HOME_DIR"
+
       - name: Cache Ollama model
         if: steps.todo.outputs.n != '0'
         uses: actions/cache@v4
         with:
           path: ${{ env.OLLAMA_MODELS }}
-          key: ollama-${{ steps.cfg.outputs.model }}
+          key: ollama-model-${{ steps.cfg.outputs.model }}
 
-      - name: Install and start Ollama
+      - name: Start Ollama
         if: steps.todo.outputs.n != '0'
         run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          sudo systemctl stop ollama || true      # use our own server with OLLAMA_MODELS
-          nohup ollama serve > ollama.log 2>&1 &
+          echo "$OLLAMA_HOME_DIR/bin" >> "$GITHUB_PATH"
+          nohup "$OLLAMA_HOME_DIR/bin/ollama" serve > ollama.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://localhost:11434/api/version && break; sleep 1; done
-          ollama pull "${{ steps.cfg.outputs.model }}"
+          "$OLLAMA_HOME_DIR/bin/ollama" pull "${{ steps.cfg.outputs.model }}"
 
       # 2. LLM extraction + geocoding
       - name: Extract metadata
@@ -75,14 +109,21 @@ jobs:
         run: python code/pipeline.py extract
 
       # 3. Always rebuild (cheap) so config changes to dedup etc. propagate
+      # always(): a failed/timed-out extraction still commits what it finished
       - name: Build map data
+        if: always()
         run: python code/pipeline.py build
 
+      - name: Show Ollama log on failure
+        if: failure()
+        run: tail -n 100 ollama.log || true
+
       - name: Commit data
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/articles.jsonl data/extractions.jsonl data/geocode_cache.json data/events.csv docs/data/events.geojson
+          git add -A data docs/data   # data/cache/ is git-ignored
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
           git commit -m "data: update $(date -u +%Y-%m-%d) [skip ci]"
           git push

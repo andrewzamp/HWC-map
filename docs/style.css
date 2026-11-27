@@ -17,6 +17,7 @@ main { display: flex; height: calc(100% - 56px); position: relative; }
 #sidebar h2 small { text-transform: none; letter-spacing: 0; }
 #search { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
 .checks { display: flex; flex-direction: column; gap: 2px; }
+.checks.scroll { max-height: 180px; overflow-y: auto; }
 .chk { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
 .chk .n { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }

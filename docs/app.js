@@ -2,12 +2,9 @@
 (() => {
   "use strict";
 
-  const SPECIES_COLORS = {
-    "American black bear": "var(--black)",
-    "brown/grizzly bear": "var(--grizzly)",
-    "polar bear": "var(--polar)",
-    "unknown bear species": "var(--unknown)",
-  };
+  // Group colours come from taxa.yaml via events.geojson metadata
+  let GROUP_COLORS = {};
+  const colorOf = (p) => GROUP_COLORS[p.taxon_group] || "#999";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "#");
@@ -30,16 +27,15 @@
   L.control.scale({ imperial: false }).addTo(map);
 
   const legend = L.control({ position: "bottomright" });
-  legend.onAdd = () => {
-    const d = L.DomUtil.create("div", "legend");
-    d.innerHTML = Object.entries(SPECIES_COLORS).map(([k, c]) =>
-      `<div><span class="dot" style="background:${c}"></span>${esc(cap(k))}</div>`).join("") +
+  legend.onAdd = () => L.DomUtil.create("div", "legend");
+  legend.addTo(map);
+  function drawLegend(groupsPresent) {
+    legend.getContainer().innerHTML = groupsPresent.map((g) =>
+      `<div><span class="dot" style="background:${GROUP_COLORS[g] || "#999"}"></span>${esc(g)}</div>`).join("") +
       `<div><span class="dot harm" style="background:#fff"></span>person injured</div>` +
       `<div><span class="dot fatal" style="background:#fff"></span>person killed</div>` +
       `<div><span class="dot region" style="background:#999"></span>region-level location</div>`;
-    return d;
-  };
-  legend.addTo(map);
+  }
 
   let clusterLayer = L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false });
   let plainLayer = L.layerGroup();
@@ -50,10 +46,11 @@
   const markers = new Map();   // event_id -> marker
   const $ = (id) => document.getElementById(id);
   const FACETS = {
-    species: { el: "f-species", get: (p) => [p.species], color: (v) => SPECIES_COLORS[v] },
+    group: { el: "f-group", get: (p) => [p.taxon_group], color: (v) => GROUP_COLORS[v] || "#999" },
+    taxon: { el: "f-taxon", get: (p) => [p.taxon] },
     conflict: { el: "f-conflict", get: (p) => p.conflict_types || [] },
     human: { el: "f-human", get: (p) => [p.human_outcome] },
-    bear: { el: "f-bear", get: (p) => [p.bear_outcome] },
+    animal: { el: "f-animal", get: (p) => [p.animal_outcome] },
   };
   const selected = {}; // facet -> Set of allowed values
 
@@ -99,7 +96,7 @@
     const [lon, lat] = ft.geometry.coordinates;
     const m = L.marker([lat, lon], {
       icon: L.divIcon({ className: "", iconSize: [size, size],
-        html: `<div class="${cls.join(" ")}" style="width:${size}px;height:${size}px;background:${SPECIES_COLORS[p.species]}"></div>` }),
+        html: `<div class="${cls.join(" ")}" style="width:${size}px;height:${size}px;background:${colorOf(p)}"></div>` }),
       title: `${p.location_name || p.admin1 || ""} — ${p.date || ""}`,
     });
     m.on("click", () => showDetail(ft));
@@ -122,9 +119,9 @@
     $("count").textContent = vis.length;
     $("list").innerHTML = vis.map((ft) => {
       const p = ft.properties;
-      return `<li data-id="${esc(p.event_id)}"><span class="swatch" style="background:${SPECIES_COLORS[p.species]}"></span>
+      return `<li data-id="${esc(p.event_id)}"><span class="swatch" style="background:${colorOf(p)}"></span>
         <span class="t">${esc(p.location_name || p.admin1 || "Unknown location")}${p.admin1 && p.location_name ? ", " + esc(p.admin1) : ""}</span>
-        <span class="s">${esc(fmtDate(p.date))} · ${esc(p.primary_conflict_type)}${p.human_outcome === "injured" || p.human_outcome === "killed" ? " · person " + esc(p.human_outcome) : ""}</span></li>`;
+        <span class="s">${esc(fmtDate(p.date))} · ${esc(p.taxon)} · ${esc(p.primary_conflict_type)}${p.human_outcome === "injured" || p.human_outcome === "killed" ? " · person " + esc(p.human_outcome) : ""}</span></li>`;
     }).join("");
     return vis;
   }
@@ -138,6 +135,8 @@
       p.confidence === "low" ? `<span class="tag warn">low-confidence extraction</span>` : "",
       p.text_source && p.text_source !== "fulltext" ? `<span class="tag warn">extracted from ${p.text_source === "headline" ? "headline" : "headline/snippet"} only</span>` : "",
       p.multiple_events ? `<span class="tag warn">article reports multiple incidents</span>` : "",
+      p.taxon_check === "disagree" ? `<span class="tag warn">species identification uncertain</span>` : "",
+      p.rabies_status === "confirmed positive" ? `<span class="tag danger">rabies confirmed</span>` : "",
       p.human_outcome === "killed" ? `<span class="tag danger">fatal</span>` : "",
     ].join("");
     const row = (k, v) => (v === null || v === undefined || v === "") ? "" : `<dt>${k}</dt><dd>${v}</dd>`;
@@ -147,12 +146,14 @@
       <div>${tags}${flags}</div>
       <p class="summary">${esc(p.summary)}</p>
       <dl>
-        ${row("Species", `${esc(cap(p.species))} <i>${esc(p.species_scientific)}</i><br><small>${esc(p.species_evidence)}</small>`)}
-        ${row("Bears involved", esc(p.n_bears))}
+        ${row("Animal", `${esc(cap(p.taxon))}${p.taxon_scientific ? ` <i>${esc(p.taxon_scientific)}</i>` : ""}<br><small>${esc(p.taxon_family || p.taxon_group)} · named in text as “${esc(p.animal_name || "—")}” · ${esc(p.taxon_evidence)}</small>`)}
+        ${row("Animals involved", esc(p.n_animals))}
         ${row("Primary type", esc(p.primary_conflict_type))}
         ${row("Human activity", esc(p.human_activity))}
         ${row("Human outcome", esc(p.human_outcome) + (p.n_people_injured ? ` (${esc(p.n_people_injured)} injured)` : "") + (p.n_people_killed ? ` (${esc(p.n_people_killed)} killed)` : ""))}
-        ${row("Bear outcome", esc(p.bear_outcome))}
+        ${row("Domestic animals", p.domestic_animal_type && p.domestic_animal_type !== "not applicable" ? esc(`${p.domestic_animal_type} — ${p.domestic_animal_outcome}`) : "")}
+        ${row("Rabies", p.rabies_status && p.rabies_status !== "not mentioned" ? esc(p.rabies_status) : "")}
+        ${row("Animal outcome", esc(p.animal_outcome))}
         ${row("Geocoded to", esc(p.geocode_match))}
         ${row("Confidence", esc(p.confidence))}
         ${row("Notes", esc(p.notes))}
@@ -212,6 +213,8 @@
     .then((r) => r.json())
     .then((fc) => {
       FEATURES = fc.features;
+      GROUP_COLORS = (fc.metadata && fc.metadata.group_colors) || {};
+      drawLegend([...new Set(FEATURES.map((f) => f.properties.taxon_group))].sort());
       FEATURES.forEach((ft) => markers.set(ft.properties.event_id, markerFor(ft)));
       Object.keys(FACETS).forEach(buildFacet);
       const m = fc.metadata || {};

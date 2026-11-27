@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 from gnews import GNews
 
+import taxa
 from common import ARTICLES, article_id, append_jsonl, load_config, norm_title, read_jsonl
 
 log = logging.getLogger("fetch")
@@ -27,27 +28,26 @@ def _iso(rfc822: str) -> str | None:
 
 
 def search(cfg: dict) -> list[dict]:
+    """Run every (taxon group × edition) query; interleave results round-robin
+    so a small max_new_articles still samples all groups and editions."""
     s = cfg["search"]
-    # gnews inserts the query into the RSS URL without encoding quotes or
-    # parentheses, so encode it ourselves (spaces -> %20, which gnews keeps).
-    query = quote(" ".join(s["query"].split()), safe="")
-    per_edition: list[list[dict]] = []
-    for country in s["countries"]:
-        gn = GNews(
-            language=s["language"],
-            country=country,
-            period=s["period"],
-            max_results=s["max_results_per_country"],
-            exclude_websites=s.get("exclude_websites") or None,
-        )
-        res = gn.get_news(query) or []
-        log.info("Google News %s edition: %d hits", country, len(res))
+    per_query: list[list[dict]] = []
+    for q in taxa.queries(s):
+        gn = GNews(language=q["language"], country=q["country"], period=s["period"],
+                   max_results=s["max_results_per_query"],
+                   exclude_websites=s.get("exclude_websites") or None)
+        try:
+            # gnews inserts the query into the RSS URL without encoding quotes or
+            # parentheses, so encode it ourselves (spaces -> %20, which gnews keeps).
+            res = gn.get_news(quote(q["query"], safe="")) or []
+        except Exception as e:
+            log.warning("query failed (%s %s %s): %r", q["group"], q["country"], q["language"], e)
+            res = []
+        log.info("Google News %s/%s, group %-10s: %d hits", q["country"], q["language"], q["group"], len(res))
         for r in res:
-            r["_edition"] = country
-        per_edition.append(res)
-    # interleave editions so a small max_new_articles still samples all of them
-    hits = [h for group in zip_longest(*per_edition) for h in group if h is not None]
-    return hits
+            r["_edition"], r["_language"], r["_group"] = q["country"], q["language"], q["group"]
+        per_query.append(res)
+    return [h for grp in zip_longest(*per_query) for h in grp if h is not None]
 
 
 def resolve_url(gnews_url: str, interval: float) -> str | None:
@@ -102,6 +102,8 @@ def main() -> list[dict]:
             "publisher_href": pub.get("href"),
             "published": _iso(h.get("published date")),
             "edition": h["_edition"],
+            "language": h["_language"],
+            "query_group": h["_group"],
             "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "has_fulltext": False,
         })

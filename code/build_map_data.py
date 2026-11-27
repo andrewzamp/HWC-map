@@ -1,7 +1,8 @@
 """Step 3 — join articles + extractions, merge duplicate reports, write GeoJSON.
 
 Duplicate handling: the same incident is typically covered by several outlets.
-Reports are merged by single-linkage clustering when they share species and
+Reports are merged by single-linkage clustering when they share the taxon
+(species, or group if unidentified) and
 are within `max_distance_km` and `max_days_apart` (config.yaml). Each map
 feature is one *event* carrying all its source articles; attribute values come
 from the best-documented report (full text > snippet, higher confidence,
@@ -17,7 +18,7 @@ import math
 from datetime import date, datetime, timezone
 
 from common import ARTICLES, DATA, EXTRACTIONS, GEOJSON, load_config, read_jsonl
-from schema import SCIENTIFIC
+import taxa
 
 log = logging.getLogger("build")
 
@@ -44,6 +45,11 @@ def _date(r: dict) -> date | None:
     return None
 
 
+def _taxon_key(r: dict) -> str:
+    """Same species if identified to species, otherwise same group."""
+    return r.get("taxon") if r.get("taxon_rank") == "species" else f"group:{r.get('taxon_group')}"
+
+
 def cluster(rows: list[dict], cfg: dict) -> list[list[dict]]:
     parent = list(range(len(rows)))
 
@@ -56,7 +62,7 @@ def cluster(rows: list[dict], cfg: dict) -> list[list[dict]]:
     for i in range(len(rows)):
         for j in range(i + 1, len(rows)):
             a, b = rows[i], rows[j]
-            if cfg["same_species_required"] and a["species"] != b["species"]:
+            if _taxon_key(a) != _taxon_key(b):
                 continue
             da, db = _date(a), _date(b)
             if da is None or db is None or abs((da - db).days) > cfg["max_days_apart"]:
@@ -79,7 +85,7 @@ def main() -> dict:
     arts = {a["id"]: a for a in read_jsonl(ARTICLES)}
     ex = read_jsonl(EXTRACTIONS)
     rows = [{**arts.get(e["id"], {}), **e} for e in ex]
-    events = [r for r in rows if r.get("is_specific_event") and r.get("real_bear_involved", True)]
+    events = [r for r in rows if r.get("is_specific_event") and r.get("real_wild_carnivore_involved")]
     located = [r for r in events if r.get("lat") is not None]
 
     features = []
@@ -87,14 +93,15 @@ def main() -> dict:
         rep = best(g)
         d = _date(rep)
         props = {k: rep.get(k) for k in (
-            "species", "species_evidence", "n_bears", "conflict_types", "primary_conflict_type",
-            "human_activity", "human_outcome", "n_people_injured", "n_people_killed", "bear_outcome",
+            "animal_name", "taxon", "taxon_scientific", "taxon_rank", "taxon_group", "taxon_family",
+            "taxon_evidence", "taxon_check", "n_animals", "conflict_types", "primary_conflict_type",
+            "human_activity", "human_outcome", "n_people_injured", "n_people_killed",
+            "domestic_animal_type", "domestic_animal_outcome", "rabies_status", "animal_outcome",
             "location_name", "admin1", "country", "location_precision", "geocode_level",
             "geocode_match", "summary", "confidence", "notes", "event_date_precision",
             "multiple_events", "text_source", "llm_model")}
         props.update({
             "event_id": min(r["id"] for r in g),
-            "species_scientific": SCIENTIFIC.get(rep["species"]),
             "date": d.isoformat() if d else None,
             "date_is_publication_date": not rep.get("event_date"),
             "n_reports": len(g),
@@ -115,17 +122,20 @@ def main() -> dict:
         "n_event_reports_not_geocoded": len(events) - len(located),
         "n_events": len(features),
         "dedup": cfg["dedup"],
+        "group_colors": taxa.group_colors(),
     }
     GEOJSON.parent.mkdir(parents=True, exist_ok=True)
     GEOJSON.write_text(json.dumps({"type": "FeatureCollection", "metadata": meta, "features": features},
                                   ensure_ascii=False, indent=1))
 
     # Flat table for analysis (one row per event, sources collapsed)
-    cols = ["event_id", "date", "date_is_publication_date", "event_date_precision", "species",
-            "species_scientific", "species_evidence", "primary_conflict_type", "conflict_types",
-            "human_activity", "human_outcome", "n_people_injured", "n_people_killed", "bear_outcome",
-            "n_bears", "location_name", "admin1", "country", "lat", "lon", "geocode_level",
-            "confidence", "n_reports", "summary", "source_urls"]
+    cols = ["event_id", "date", "date_is_publication_date", "event_date_precision",
+            "taxon", "taxon_scientific", "taxon_rank", "taxon_family", "taxon_group", "animal_name",
+            "taxon_evidence", "taxon_check", "n_animals", "primary_conflict_type", "conflict_types",
+            "human_activity", "human_outcome", "n_people_injured", "n_people_killed",
+            "domestic_animal_type", "domestic_animal_outcome", "rabies_status", "animal_outcome",
+            "location_name", "admin1", "country", "lat", "lon", "geocode_level",
+            "confidence", "text_source", "n_reports", "summary", "source_urls"]
     with open(DATA / "events.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()

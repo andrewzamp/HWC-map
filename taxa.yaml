@@ -1,0 +1,184 @@
+# Taxon registry — single source of truth for:
+#   * search queries (query_terms × conflict terms, minus exclude_terms)
+#   * the closed species vocabulary the LLM must choose from
+#   * deterministic name → taxon matching (synonyms, EN + ES)
+#   * map colours (one per group; Okabe–Ito colour-blind-safe palette)
+#
+# Scope (v3): wild terrestrial Carnivora that regularly generate conflict
+# news in the USA, Canada and Mexico. Other carnivores mentioned in articles
+# are still captured as "other wild carnivore" with the name as written.
+# Nomenclature follows the Mammal Diversity Database (MDD).
+#
+# query_terms: words/phrases that must appear (OR-ed). Phrases are used for
+#   ambiguous words (e.g. "fox" alone matches every FOX-affiliated TV station).
+# exclude_terms: removed with Google's -"..." operator. Keep them specific:
+#   an over-broad exclusion silently removes true positives.
+# ambiguous names (e.g. Mexican "tejón" = coati, elsewhere badger) are listed
+#   under `ambiguous_names` and are NOT resolved by dictionary; the LLM decides.
+
+groups:
+  - id: bears
+    label: Bears
+    family: Ursidae
+    generic_names: [bear, bears, bear cub, cub, oso, osos, osa]
+    color: "#D55E00"
+    query_terms:
+      en: [bear, bears, grizzly, grizzlies]
+      es: [oso, osos, osa]
+    exclude_terms:
+      en: ["Chicago Bears", "bear market", "Care Bears", "teddy bear"]
+      es: ["oso de peluche"]
+    species:
+      - scientific: Ursus americanus
+        name: American black bear
+        synonyms: [black bear, black bears, cinnamon bear, kermode bear, spirit bear, oso negro, osa negra, oso negro americano]
+      - scientific: Ursus arctos
+        name: brown bear
+        synonyms: [grizzly, grizzly bear, grizzlies, brown bear, kodiak bear, oso pardo, oso grizzly]
+      - scientific: Ursus maritimus
+        name: polar bear
+        synonyms: [polar bear, polar bears, oso polar]
+
+  - id: canids
+    label: Wolves, coyotes & foxes
+    family: Canidae
+    generic_names: [fox, foxes, zorro, zorros, zorra, canine, wild canine]
+    color: "#0072B2"
+    query_terms:
+      en: [wolf, wolves, coyote, coyotes, foxes, "red fox", "gray fox", "grey fox", "arctic fox", "rabid fox", "fox attack", "fox bit"]
+      es: [lobo, lobos, "lobo mexicano", coyote, coyotes, zorro, zorros, zorra]
+    exclude_terms:
+      en: ["Fox News", "Wolf Blitzer", Timberwolves, "lone wolf", smuggler, smuggling, "Wolf Pack"]
+      es: [pollero, migrantes, "El Zorro"]
+    species:
+      - scientific: Canis lupus
+        name: gray wolf
+        synonyms: [wolf, wolves, gray wolf, grey wolf, timber wolf, mexican wolf, mexican gray wolf, lobo, lobo gris, lobo mexicano]
+      - scientific: Canis rufus
+        name: red wolf
+        synonyms: [red wolf, red wolves, lobo rojo]
+      - scientific: Canis latrans
+        name: coyote
+        synonyms: [coyote, coyotes, coywolf]
+      - scientific: Vulpes vulpes
+        name: red fox
+        synonyms: [red fox, red foxes, zorro rojo]
+      - scientific: Urocyon cinereoargenteus
+        name: gray fox
+        synonyms: [gray fox, grey fox, zorra gris, zorro gris]
+      - scientific: Vulpes lagopus
+        name: arctic fox
+        synonyms: [arctic fox, zorro ártico]
+      - scientific: Vulpes macrotis
+        name: kit fox
+        synonyms: [kit fox, zorrita del desierto]
+
+  - id: felids
+    label: Wild cats
+    family: Felidae
+    generic_names: [lynx, wildcat, wild cat, big cat, felino, felino silvestre]
+    color: "#E69F00"
+    query_terms:
+      en: [cougar, cougars, "mountain lion", "mountain lions", puma, "Florida panther", bobcat, bobcats, lynx, jaguar, ocelot]
+      es: [puma, pumas, "león de montaña", jaguar, jaguares, lince, ocelote, "gato montés"]
+    exclude_terms:
+      en: ["Carolina Panthers", "Jacksonville Jaguars", "Jaguar Land Rover", "BYU Cougars", "Houston Cougars"]
+      es: ["Pumas UNAM", "Jaguar Land Rover"]
+    species:
+      - scientific: Puma concolor
+        name: cougar
+        synonyms: [cougar, cougars, mountain lion, mountain lions, puma, pumas, florida panther, panther, catamount, león de montaña]
+      - scientific: Lynx rufus
+        name: bobcat
+        synonyms: [bobcat, bobcats, lince rojo, gato montés]
+      - scientific: Lynx canadensis
+        name: Canada lynx
+        synonyms: [canada lynx, canadian lynx, lince canadiense]
+      - scientific: Panthera onca
+        name: jaguar
+        synonyms: [jaguar, jaguars, jaguares]
+      - scientific: Leopardus pardalis
+        name: ocelot
+        synonyms: [ocelot, ocelots, ocelote]
+
+  - id: mustelids
+    label: Weasel family
+    family: Mustelidae
+    generic_names: [otter, otters, marten, martens, nutria, nutrias, weasel]
+    color: "#009E73"
+    query_terms:
+      en: [wolverine, "fisher cat", badger, otter, otters, mink, marten]
+      es: [nutria, nutrias, "nutria de río", tejón, tejones, glotón]
+    exclude_terms:
+      en: ["Michigan Wolverines", "Wisconsin Badgers", Marvel, "Hugh Jackman"]
+      es: []
+    species:
+      - scientific: Gulo gulo
+        name: wolverine
+        synonyms: [wolverine, wolverines, glotón]
+      - scientific: Pekania pennanti
+        name: fisher
+        synonyms: [fisher, fisher cat, fishers]
+      - scientific: Taxidea taxus
+        name: American badger
+        synonyms: [american badger, badger, badgers]
+      - scientific: Lontra canadensis
+        name: North American river otter
+        synonyms: [river otter, river otters, north american river otter, nutria de río norteamericana]
+      - scientific: Lontra longicaudis
+        name: Neotropical otter
+        synonyms: [neotropical otter, nutria neotropical, perro de agua]
+      - scientific: Neogale vison
+        name: American mink
+        synonyms: [american mink, mink, visón]
+      - scientific: Martes americana
+        name: American marten
+        synonyms: [american marten, marta americana]
+
+  - id: procyonids
+    label: Raccoons & coatis
+    family: Procyonidae
+    color: "#CC79A7"
+    query_terms:
+      en: [raccoon, raccoons, coati, coatis, coatimundi, ringtail]
+      es: [mapache, mapaches, coatí, coatíes, cacomixtle]
+    exclude_terms:
+      en: []
+      es: []
+    species:
+      - scientific: Procyon lotor
+        name: raccoon
+        synonyms: [raccoon, raccoons, racoon, mapache, mapaches]
+      - scientific: Nasua narica
+        name: white-nosed coati
+        synonyms: [coati, coatis, coatimundi, white-nosed coati, coatí, coatíes, pizote]
+      - scientific: Bassariscus astutus
+        name: ringtail
+        synonyms: [ringtail, ringtail cat, cacomixtle]
+
+  - id: skunks
+    label: Skunks
+    family: Mephitidae
+    generic_names: [skunk, skunks, zorrillo, zorrillos, mofeta]
+    color: "#56B4E9"
+    query_terms:
+      en: [skunk, skunks]
+      es: [zorrillo, zorrillos, mofeta]
+    exclude_terms:
+      en: []
+      es: []
+    species:
+      - scientific: Mephitis mephitis
+        name: striped skunk
+        synonyms: [striped skunk, zorrillo listado]
+      - scientific: Spilogale putorius
+        name: eastern spotted skunk
+        synonyms: [spotted skunk, eastern spotted skunk, zorrillo manchado]
+
+# generic_names (per group) resolve to "unidentified <group>", never to a species.
+# Names whose meaning depends on country or context: no dictionary match at all.
+ambiguous_names: [tejón, tejones, panther, lion, león, gato montés]
+
+# Category used when the animal is a wild carnivore outside this registry
+# (e.g. sea otter, ermine) — kept with the name as written for review.
+other_label: other wild carnivore
