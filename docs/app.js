@@ -20,16 +20,12 @@
   // Keyless basemaps only (CARTO now requires an API key).
   const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
   const base = {
-    "Light gray": L.tileLayer(ESRI + "Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-      attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors", maxZoom: 16 }),
-    "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 }),
     "Topographic": L.tileLayer(ESRI + "World_Topo_Map/MapServer/tile/{z}/{y}/{x}", {
-      attribution: "Tiles &copy; Esri", maxZoom: 19 }),
+      attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, &copy; OpenStreetMap contributors", maxZoom: 19 }),
     "Satellite": L.tileLayer(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", {
       attribution: "Tiles &copy; Esri &mdash; Maxar, Earthstar Geographics", maxZoom: 19 }),
   };
-  base["Light gray"].addTo(map);
+  base.Topographic.addTo(map);
   L.control.layers(base, null, { position: "topright" }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
 

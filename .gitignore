@@ -7,3 +7,6 @@ __pycache__/
 .venv/
 .env
 .pytest_cache/
+
+# files dropped here by Claude (not part of the project)
+Claude outputs/
