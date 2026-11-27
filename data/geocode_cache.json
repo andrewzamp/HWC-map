@@ -1,4 +1,16 @@
 {
+ "B.C. provincial park, British Columbia, Canada": [],
+ "B.C., British Columbia, Canada": [
+  {
+   "addresstype": "building",
+   "country_code": "ca",
+   "display_name": "Block C, Columbine Way, Carey, Saanich, Capital Regional District, British Columbia, V8Z 6H9, Canada",
+   "lat": 48.4645468,
+   "lon": -123.3939079,
+   "state": "British Columbia",
+   "type": "terrace"
+  }
+ ],
  "British Columbia, Canada": [
   {
    "addresstype": "state",
@@ -55,6 +67,17 @@
    "lon": -100.2334687,
    "state": "Nuevo León",
    "type": "residential"
+  }
+ ],
+ "Goldstream Park, British Columbia, Canada": [
+  {
+   "addresstype": "park",
+   "country_code": "ca",
+   "display_name": "Goldstream Meadows Park, Langford, Capital Regional District, British Columbia, Canada",
+   "lat": 48.4525326,
+   "lon": -123.5395153,
+   "state": "British Columbia",
+   "type": "park"
   }
  ],
  "Goldstream Park, unknown, Canada": [],
@@ -119,6 +142,17 @@
  "New Mexico, unknown, United States": [],
  "Vancouver vape store, British Columbia, Canada": [],
  "highway near B.C. provincial park, British Columbia, Canada": [],
+ "lago Tahoe, United States": [
+  {
+   "addresstype": "lake",
+   "country_code": "us",
+   "display_name": "Lake Tahoe, Placer County, California, United States",
+   "lat": 39.0885405,
+   "lon": -120.0503528,
+   "state": "California",
+   "type": "lake"
+  }
+ ],
  "near Goldstream Park, Canada": [],
  "unknown, Canada": [
   {
